@@ -114,7 +114,7 @@
   .panel{ display:none; }
   .panel.active{ display:block; }
 
-  .catalog-cover{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 20px; min-height:320px; grid-column:1/-1; }
+  .catalog-cover{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 20px; min-height:320px; }
   .catalog-cover-logo{ max-height:80px; max-width:200px; object-fit:contain; margin-bottom:18px; }
   .catalog-cover-nombre{ font-family:'Baloo 2',sans-serif; font-size:3.2rem; line-height:1.05; font-weight:800; color:var(--green-600); margin:0; word-break:break-word; }
   .catalog-cover-sub{ font-family:'Baloo 2',sans-serif; font-size:2.2rem; font-weight:700; color:var(--green-600); margin:2px 0 0; }
@@ -146,24 +146,23 @@
   @media (max-width:880px){ .vender-grid{ grid-template-columns:1fr; } .cart-panel{ position:static; } }
   .catalog-toolbar{ margin-bottom:16px; }
   .input-search{ width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:var(--radius-sm); font-size:.95rem; background:var(--surface); color:var(--ink); }
-  .input-search-lg{ max-width:420px; margin-bottom:20px; }
   .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
   .chip{ padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:.82rem; font-weight:600; cursor:pointer; }
   .chip.active{ background:var(--green-600); border-color:var(--green-600); color:#fff; }
 
-  .product-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
-  .product-card{
-    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
-    padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-md);
+  .product-grid{ display:flex; flex-direction:column; gap:8px; }
+  .product-row{
+    display:flex; align-items:center; gap:14px;
+    padding:12px 16px; border:1px solid var(--line); border-radius:var(--radius-md);
     background:var(--surface); cursor:pointer; text-align:left; width:100%;
-    transition:border-color .15s, transform .08s;
+    transition:border-color .15s;
   }
-  .product-card:hover{ border-color:var(--green-500); }
-  .product-card:active{ transform:scale(.98); }
-  .product-card:disabled{ opacity:.55; cursor:not-allowed; }
-  .product-card-cat{ font-size:.72rem; color:var(--ink-soft); }
-  .product-card-name{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:1rem; color:var(--ink); }
-  .product-card-price{ font-weight:700; font-variant-numeric:tabular-nums; color:var(--green-700); }
+  .product-row:hover{ border-color:var(--green-500); }
+  .product-row:disabled{ opacity:.55; cursor:not-allowed; }
+  .product-row-main{ display:flex; flex-direction:column; flex:1; min-width:0; }
+  .product-row-name{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:.98rem; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .product-row-meta{ font-size:.76rem; color:var(--ink-soft); }
+  .product-row-price{ font-weight:700; font-variant-numeric:tabular-nums; color:var(--green-700); min-width:78px; text-align:right; }
 
   .stock-pill{ display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; font-size:.76rem; font-weight:600; }
   .stock-ok{ background:var(--green-100); color:var(--green-700); }
@@ -223,14 +222,6 @@
   .summary-label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
   .summary-value{ font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); }
   .summary-sub{ font-size:.75rem; color:var(--ink-soft); }
-
-  /* ---------- Buscar ---------- */
-  .buscar-results{ display:flex; flex-direction:column; gap:10px; }
-  .buscar-row{ display:flex; align-items:center; gap:16px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); flex-wrap:wrap; }
-  .buscar-row-main{ display:flex; flex-direction:column; flex:1; min-width:160px; }
-  .buscar-row-name{ font-weight:600; }
-  .buscar-row-meta{ font-size:.8rem; color:var(--ink-soft); }
-  .buscar-row-price{ font-weight:700; color:var(--green-700); font-variant-numeric:tabular-nums; min-width:76px; text-align:right; }
 
   /* ---------- Modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(10,20,14,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100; }
@@ -309,10 +300,6 @@
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="20" x2="5" y2="12"/><line x1="12" y1="20" x2="12" y2="7"/><line x1="19" y1="20" x2="19" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
         <span>Ventas del día</span>
       </button>
-      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="buscar" role="tab" aria-selected="false">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg>
-        <span>Buscar</span>
-      </button>
     </nav>
   </header>
 
@@ -383,18 +370,6 @@
           <tbody id="ventasTableBody"></tbody>
         </table>
       </div>
-    </section>
-
-    <!-- BUSCAR -->
-    <section id="panel-buscar" class="panel" role="tabpanel">
-      <div class="panel-header">
-        <div>
-          <h2>Buscar productos</h2>
-          <p class="panel-subtitle">Encuentra existencias y precios rápidamente, por nombre, categoría o SKU.</p>
-        </div>
-      </div>
-      <input id="buscarInput" type="search" class="input-search input-search-lg" placeholder="Escribe para buscar…" />
-      <div id="buscarResults" class="buscar-results"></div>
     </section>
 
   </main>
@@ -895,11 +870,13 @@
     grid.innerHTML = list.map(p=>{
       const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
       const badgeText = p.stock<=0 ? 'Sin existencia' : `${p.stock} en stock`;
-      return `<button type="button" class="product-card" data-action="add-to-cart" data-id="${p.id}" ${p.stock<=0?'disabled':''}>
-        <span class="product-card-cat">${escapeHTML(p.category)}</span>
-        <span class="product-card-name">${escapeHTML(p.name)}</span>
-        <span class="product-card-price">${formatMoney(p.price)}</span>
+      return `<button type="button" class="product-row" data-action="add-to-cart" data-id="${p.id}" ${p.stock<=0?'disabled':''}>
+        <div class="product-row-main">
+          <span class="product-row-name">${escapeHTML(p.name)}</span>
+          <span class="product-row-meta">${escapeHTML(p.category)}${p.sku?' · '+escapeHTML(p.sku):''}</span>
+        </div>
         <span class="stock-pill stock-${level}">${badgeText}</span>
+        <span class="product-row-price">${formatMoney(p.price)}</span>
       </button>`;
     }).join('');
   }
@@ -1251,40 +1228,6 @@
   }
 
   // ---------- Rendering: Buscar ----------
-  function renderBuscarResults(query){
-    const container = document.getElementById('buscarResults');
-    if(state.products.length===0){
-      container.innerHTML = `<div class="empty-state"><p>Aún no tienes productos registrados.</p></div>`;
-      return;
-    }
-    const q = (query||'').trim().toLowerCase();
-    if(!q){
-      container.innerHTML = `<div class="empty-state"><p>Escribe para buscar entre tus ${state.products.length} productos.</p></div>`;
-      return;
-    }
-    const results = state.products.filter(p=>
-      p.name.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      (p.sku||'').toLowerCase().includes(q)
-    );
-    if(results.length===0){
-      container.innerHTML = `<div class="empty-state"><p>No se encontraron productos que coincidan con «${escapeHTML(query)}».</p></div>`;
-      return;
-    }
-    container.innerHTML = results.map(p=>{
-      const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
-      return `<div class="buscar-row">
-        <div class="buscar-row-main">
-          <span class="buscar-row-name">${escapeHTML(p.name)}</span>
-          <span class="buscar-row-meta">${escapeHTML(p.category)}${p.sku?' · '+escapeHTML(p.sku):''}</span>
-        </div>
-        <span class="stock-pill stock-${level}">${p.stock} en stock</span>
-        <span class="buscar-row-price">${formatMoney(p.price)}</span>
-        <button type="button" class="btn-secondary btn-sm" data-action="quick-add-from-search" data-id="${p.id}" ${p.stock<=0?'disabled':''}>Agregar a venta</button>
-      </div>`;
-    }).join('');
-  }
-
   // ---------- Tabs ----------
   function switchTab(tab){
     document.querySelectorAll('.tab-btn').forEach(b=>{
@@ -1294,7 +1237,6 @@
     });
     document.querySelectorAll('.panel').forEach(p=> p.classList.toggle('active', p.id === 'panel-'+tab));
     if(tab==='ventas') renderVentas();
-    if(tab==='buscar'){ const inp = document.getElementById('buscarInput'); renderBuscarResults(inp?inp.value:''); }
   }
 
   // ---------- Toast ----------
@@ -1332,11 +1274,6 @@
       case 'delete-product': openDeleteConfirm(id); break;
       case 'close-modal': closeModal(); break;
       case 'category-chip': setCategory(btn.dataset.cat); break;
-      case 'quick-add-from-search':
-        addToCart(id);
-        switchTab('vender');
-        showToast('Producto agregado a la venta actual.', 'success');
-        break;
       case 'save-add-product': handleSaveAddProduct(); break;
       case 'save-receive-stock': handleSaveReceiveStock(); break;
       case 'save-edit-product': handleSaveEditProduct(id); break;
@@ -1349,7 +1286,6 @@
 
   document.addEventListener('input', function(e){
     if(e.target.id==='venderSearchInput'){ venderSearch = e.target.value; renderVenderGrid(); }
-    else if(e.target.id==='buscarInput'){ renderBuscarResults(e.target.value); }
     else if(e.target.id==='recibidoInput'){ updateChangeDisplay(); }
     else if(e.target.id==='folioSearchInput'){ renderFolioSearch(e.target.value); }
   });
@@ -1377,7 +1313,6 @@
     renderCart();
     renderInventory();
     renderVentas();
-    renderBuscarResults('');
     applyBrandLogo();
     renderCatalogCover();
     updateSyncPill();
