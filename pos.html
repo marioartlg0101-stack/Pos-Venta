@@ -114,13 +114,14 @@
   .panel{ display:none; }
   .panel.active{ display:block; }
 
-  .inicio-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:90px 20px; min-height:45vh; }
-  .inicio-logo{ max-height:96px; max-width:220px; object-fit:contain; margin-bottom:22px; }
-  .inicio-nombre{ font-family:'Baloo 2',sans-serif; font-size:4rem; line-height:1.05; font-weight:800; color:var(--green-600); margin:0; word-break:break-word; }
-  .inicio-credito-row{ display:flex; align-items:center; gap:14px; margin-top:52px; }
-  .inicio-linea{ width:44px; height:1px; background:var(--line); }
-  .inicio-credito{ color:var(--ink-soft); font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap; }
-  @media (max-width:640px){ .inicio-nombre{ font-size:2.6rem; } }
+  .catalog-cover{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 20px; min-height:320px; grid-column:1/-1; }
+  .catalog-cover-logo{ max-height:80px; max-width:200px; object-fit:contain; margin-bottom:18px; }
+  .catalog-cover-nombre{ font-family:'Baloo 2',sans-serif; font-size:3.2rem; line-height:1.05; font-weight:800; color:var(--green-600); margin:0; word-break:break-word; }
+  .catalog-cover-sub{ font-family:'Baloo 2',sans-serif; font-size:2.2rem; font-weight:700; color:var(--green-600); margin:2px 0 0; }
+  .catalog-cover-credito-row{ display:flex; align-items:center; gap:14px; margin-top:36px; }
+  .catalog-cover-linea{ width:44px; height:1px; background:var(--line); }
+  .catalog-cover-credito{ color:var(--ink-soft); font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap; }
+  @media (max-width:640px){ .catalog-cover-nombre{ font-size:2.1rem; } .catalog-cover-sub{ font-size:1.5rem; } }
 
   .panel-header{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:22px; }
   .panel-header h2{ font-size:1.4rem; margin:0 0 4px; }
@@ -296,11 +297,7 @@
       <span id="syncPill" class="sync-pill" style="display:none;"></span>
     </div>
     <nav class="tabs" role="tablist" aria-label="Secciones">
-      <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="inicio" role="tab" aria-selected="true">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M9.5 19.5v-6h5v6"/></svg>
-        <span>Inicio</span>
-      </button>
-      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="vender" role="tab" aria-selected="false">
+      <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="vender" role="tab" aria-selected="true">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5V3z"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="15.5" y2="11"/></svg>
         <span>Vender</span>
       </button>
@@ -321,21 +318,8 @@
 
   <main class="content">
 
-    <!-- INICIO -->
-    <section id="panel-inicio" class="panel active" role="tabpanel">
-      <div class="inicio-wrap">
-        <img id="inicioLogoImg" class="inicio-logo" style="display:none;" alt="" />
-        <h1 id="inicioNombre" class="inicio-nombre">Mi Negocio</h1>
-        <div class="inicio-credito-row">
-          <span class="inicio-linea"></span>
-          <span class="inicio-credito">Desarrollado por MALG</span>
-          <span class="inicio-linea"></span>
-        </div>
-      </div>
-    </section>
-
     <!-- VENDER -->
-    <section id="panel-vender" class="panel" role="tabpanel">
+    <section id="panel-vender" class="panel active" role="tabpanel">
       <div class="vender-grid">
         <div class="vender-catalog">
           <div class="catalog-toolbar">
@@ -490,10 +474,10 @@
       img.style.display = 'none';
     }
   }
-  function renderInicio(){
-    const nombreEl = document.getElementById('inicioNombre');
+  function renderCatalogCover(){
+    const nombreEl = document.getElementById('catalogCoverNombre');
     if(nombreEl) nombreEl.textContent = state.businessName;
-    const logoEl = document.getElementById('inicioLogoImg');
+    const logoEl = document.getElementById('catalogCoverLogo');
     if(logoEl){
       if(state.negocioLogoUrl){ logoEl.src = state.negocioLogoUrl; logoEl.style.display = 'block'; }
       else{ logoEl.style.display = 'none'; }
@@ -635,7 +619,7 @@
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       saveState();
       applyBrandLogo();
-      renderInicio();
+      renderCatalogCover();
       if(data.estatus === 'suspendido'){
         renderSuspendedScreen();
       }else if(wasSuspended){
@@ -879,7 +863,19 @@
     renderCategoryChips();
     const grid = document.getElementById('productGrid');
     if(state.products.length===0){
-      grid.innerHTML = `<div class="empty-state"><p>Aún no tienes productos registrados.</p><button type="button" class="btn-primary" data-action="goto-inventario">Ir a Inventario</button></div>`;
+      grid.innerHTML = `
+        <div class="catalog-cover">
+          <img id="catalogCoverLogo" class="catalog-cover-logo" style="display:none;" alt="" />
+          <h1 id="catalogCoverNombre" class="catalog-cover-nombre">Mi Negocio</h1>
+          <p class="catalog-cover-sub">Venta</p>
+          <div class="catalog-cover-credito-row">
+            <span class="catalog-cover-linea"></span>
+            <span class="catalog-cover-credito">Desarrollado por MALG</span>
+            <span class="catalog-cover-linea"></span>
+          </div>
+          <button type="button" class="btn-primary" data-action="goto-inventario" style="margin-top:28px;">Ir a Inventario</button>
+        </div>`;
+      renderCatalogCover();
       return;
     }
     const q = venderSearch.trim().toLowerCase();
@@ -1368,7 +1364,7 @@
       nameInput.value = state.businessName;
       saveState();
       document.title = state.businessName + ' · Punto de Venta';
-      renderInicio();
+      renderCatalogCover();
     });
 
     document.getElementById('ventasDateInput').value = ventasDate;
@@ -1379,7 +1375,7 @@
     renderVentas();
     renderBuscarResults('');
     applyBrandLogo();
-    renderInicio();
+    renderCatalogCover();
     updateSyncPill();
     if(cloudEnabled && state.negocioId){
       verificarEstatus();
