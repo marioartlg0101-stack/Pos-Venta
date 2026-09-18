@@ -6,7 +6,7 @@
 <title>Punto de Venta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
@@ -116,8 +116,11 @@
 
   .inicio-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:90px 20px; min-height:45vh; }
   .inicio-logo{ max-height:96px; max-width:220px; object-fit:contain; margin-bottom:22px; }
-  .inicio-nombre{ font-family:'Space Grotesk',sans-serif; font-size:2.1rem; font-weight:700; color:var(--ink); margin:0 0 6px; }
-  .inicio-credito{ color:var(--ink-soft); font-size:.82rem; margin-top:46px; }
+  .inicio-nombre{ font-family:'Baloo 2',sans-serif; font-size:4rem; line-height:1.05; font-weight:800; color:var(--green-600); margin:0; word-break:break-word; }
+  .inicio-credito-row{ display:flex; align-items:center; gap:14px; margin-top:52px; }
+  .inicio-linea{ width:44px; height:1px; background:var(--line); }
+  .inicio-credito{ color:var(--ink-soft); font-size:.78rem; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap; }
+  @media (max-width:640px){ .inicio-nombre{ font-size:2.6rem; } }
 
   .panel-header{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:22px; }
   .panel-header h2{ font-size:1.4rem; margin:0 0 4px; }
@@ -323,7 +326,11 @@
       <div class="inicio-wrap">
         <img id="inicioLogoImg" class="inicio-logo" style="display:none;" alt="" />
         <h1 id="inicioNombre" class="inicio-nombre">Mi Negocio</h1>
-        <p class="inicio-credito">Desarrollado por MALG</p>
+        <div class="inicio-credito-row">
+          <span class="inicio-linea"></span>
+          <span class="inicio-credito">Desarrollado por MALG</span>
+          <span class="inicio-linea"></span>
+        </div>
       </div>
     </section>
 
