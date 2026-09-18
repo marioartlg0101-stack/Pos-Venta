@@ -862,7 +862,12 @@
   function renderVenderGrid(){
     renderCategoryChips();
     const grid = document.getElementById('productGrid');
-    if(state.products.length===0){
+    const q = venderSearch.trim().toLowerCase();
+    const buscando = q !== '' || activeCategory !== 'Todas';
+    if(!buscando){
+      const ayuda = state.products.length===0
+        ? '<button type="button" class="btn-primary" data-action="goto-inventario" style="margin-top:28px;">Ir a Inventario</button>'
+        : '<p style="margin-top:28px; color:var(--ink-soft); font-size:.85rem;">Busca un producto o elige una categoría para empezar a vender.</p>';
       grid.innerHTML = `
         <div class="catalog-cover">
           <img id="catalogCoverLogo" class="catalog-cover-logo" style="display:none;" alt="" />
@@ -873,12 +878,11 @@
             <span class="catalog-cover-credito">Desarrollado por MALG</span>
             <span class="catalog-cover-linea"></span>
           </div>
-          <button type="button" class="btn-primary" data-action="goto-inventario" style="margin-top:28px;">Ir a Inventario</button>
+          ${ayuda}
         </div>`;
       renderCatalogCover();
       return;
     }
-    const q = venderSearch.trim().toLowerCase();
     const list = state.products.filter(p=>{
       const matchesCat = activeCategory==='Todas' || p.category===activeCategory;
       const matchesQ = !q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q);
