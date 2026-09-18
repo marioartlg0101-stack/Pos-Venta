@@ -114,6 +114,11 @@
   .panel{ display:none; }
   .panel.active{ display:block; }
 
+  .inicio-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:90px 20px; min-height:45vh; }
+  .inicio-logo{ max-height:96px; max-width:220px; object-fit:contain; margin-bottom:22px; }
+  .inicio-nombre{ font-family:'Space Grotesk',sans-serif; font-size:2.1rem; font-weight:700; color:var(--ink); margin:0 0 6px; }
+  .inicio-credito{ color:var(--ink-soft); font-size:.82rem; margin-top:46px; }
+
   .panel-header{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:22px; }
   .panel-header h2{ font-size:1.4rem; margin:0 0 4px; }
   .panel-subtitle{ color:var(--ink-soft); font-size:.9rem; margin:0; }
@@ -288,7 +293,11 @@
       <span id="syncPill" class="sync-pill" style="display:none;"></span>
     </div>
     <nav class="tabs" role="tablist" aria-label="Secciones">
-      <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="vender" role="tab" aria-selected="true">
+      <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="inicio" role="tab" aria-selected="true">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M9.5 19.5v-6h5v6"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="vender" role="tab" aria-selected="false">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5V3z"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="15.5" y2="11"/></svg>
         <span>Vender</span>
       </button>
@@ -309,8 +318,17 @@
 
   <main class="content">
 
+    <!-- INICIO -->
+    <section id="panel-inicio" class="panel active" role="tabpanel">
+      <div class="inicio-wrap">
+        <img id="inicioLogoImg" class="inicio-logo" style="display:none;" alt="" />
+        <h1 id="inicioNombre" class="inicio-nombre">Mi Negocio</h1>
+        <p class="inicio-credito">Desarrollado por MALG</p>
+      </div>
+    </section>
+
     <!-- VENDER -->
-    <section id="panel-vender" class="panel active" role="tabpanel">
+    <section id="panel-vender" class="panel" role="tabpanel">
       <div class="vender-grid">
         <div class="vender-catalog">
           <div class="catalog-toolbar">
@@ -465,6 +483,15 @@
       img.style.display = 'none';
     }
   }
+  function renderInicio(){
+    const nombreEl = document.getElementById('inicioNombre');
+    if(nombreEl) nombreEl.textContent = state.businessName;
+    const logoEl = document.getElementById('inicioLogoImg');
+    if(logoEl){
+      if(state.negocioLogoUrl){ logoEl.src = state.negocioLogoUrl; logoEl.style.display = 'block'; }
+      else{ logoEl.style.display = 'none'; }
+    }
+  }
   function needsLinking(){ return cloudEnabled && !state.negocioId; }
 
   function renderLinkScreen(){
@@ -601,6 +628,7 @@
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       saveState();
       applyBrandLogo();
+      renderInicio();
       if(data.estatus === 'suspendido'){
         renderSuspendedScreen();
       }else if(wasSuspended){
@@ -1333,6 +1361,7 @@
       nameInput.value = state.businessName;
       saveState();
       document.title = state.businessName + ' · Punto de Venta';
+      renderInicio();
     });
 
     document.getElementById('ventasDateInput').value = ventasDate;
@@ -1343,6 +1372,7 @@
     renderVentas();
     renderBuscarResults('');
     applyBrandLogo();
+    renderInicio();
     updateSyncPill();
     if(cloudEnabled && state.negocioId){
       verificarEstatus();
