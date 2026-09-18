@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Punto de Venta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --bg:#F3FBF6;
+    --surface:#FFFFFF;
+    --surface-alt:#EAFBF1;
+    --ink:#152A1E;
+    --ink-soft:#5D7368;
+    --green-500:#22C55E;
+    --green-600:#16A34A;
+    --green-700:#127A3A;
+    --green-100:#D8F7E4;
+    --line:#DFEFE5;
+    --red:#DC2626;
+    --red-bg:#FDECEC;
+    --amber:#B45309;
+    --amber-bg:#FEF3C7;
+    --radius-sm:8px;
+    --radius-md:14px;
+    --radius-lg:20px;
+    --shadow:0 1px 2px rgba(21,42,30,.06), 0 12px 28px -16px rgba(21,42,30,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1712;
+      --surface:#142019;
+      --surface-alt:#16281F;
+      --ink:#EAF3EC;
+      --ink-soft:#9FB6A8;
+      --green-500:#34D399;
+      --green-600:#22C55E;
+      --green-700:#3ADB86;
+      --green-100:#1C3A2A;
+      --line:#223226;
+      --red:#F87171;
+      --red-bg:#3B1616;
+      --amber:#FBBF24;
+      --amber-bg:#3A2A0E;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 28px -16px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1712;
+    --surface:#142019;
+    --surface-alt:#16281F;
+    --ink:#EAF3EC;
+    --ink-soft:#9FB6A8;
+    --green-500:#34D399;
+    --green-600:#22C55E;
+    --green-700:#3ADB86;
+    --green-100:#1C3A2A;
+    --line:#223226;
+    --red:#F87171;
+    --red-bg:#3B1616;
+    --amber:#FBBF24;
+    --amber-bg:#3A2A0E;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 28px -16px rgba(0,0,0,.5);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  h2,h3{ font-family:'Space Grotesk',sans-serif; margin:0; }
+  button, input, select{ font-family:inherit; }
+  button{ font-family:'Inter',sans-serif; }
+  :focus-visible{ outline:2px solid var(--green-600); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+
+  /* ---------- Layout shell ---------- */
+  .topbar{
+    position:sticky; top:0; z-index:10;
+    background:var(--surface);
+    border-bottom:1px solid var(--line);
+    padding:14px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:20px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .brand-mark{ color:var(--green-600); display:flex; flex-shrink:0; }
+  .brand-name{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.15rem;
+    border:none; background:transparent; color:var(--ink); outline:none;
+    padding:5px 8px; border-radius:8px; max-width:260px; min-width:80px;
+  }
+  .brand-name:hover, .brand-name:focus{ background:var(--surface-alt); }
+  .brand-logo{ height:28px; width:28px; object-fit:contain; border-radius:6px; flex-shrink:0; }
+
+  .tabs{ display:flex; gap:4px; background:var(--surface-alt); padding:4px; border-radius:999px; flex-shrink:0; }
+  .tab-btn{
+    display:flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px;
+    border:none; background:transparent; color:var(--ink-soft); font-weight:600;
+    font-size:.92rem; cursor:pointer; white-space:nowrap;
+  }
+  .tab-btn.active{ background:var(--green-600); color:#fff; box-shadow:0 4px 12px -4px rgba(22,163,74,.55); }
+  .tab-btn:hover:not(.active){ color:var(--ink); }
+  .tab-btn svg{ flex-shrink:0; }
+  @media (max-width:680px){ .tab-btn span{ display:none; } .tab-btn{ padding:10px; } }
+
+  .content{ max-width:1180px; margin:0 auto; padding:28px; }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  .panel-header{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px; margin-bottom:22px; }
+  .panel-header h2{ font-size:1.4rem; margin:0 0 4px; }
+  .panel-subtitle{ color:var(--ink-soft); font-size:.9rem; margin:0; }
+  .panel-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  /* ---------- Buttons ---------- */
+  .btn-primary{ background:var(--green-600); color:#fff; border:none; padding:11px 20px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; font-size:.95rem; }
+  .btn-primary:hover{ background:var(--green-700); }
+  .btn-primary:disabled{ background:var(--line); color:var(--ink-soft); cursor:not-allowed; }
+  .btn-secondary{ background:var(--surface-alt); color:var(--green-700); border:1px solid var(--green-100); padding:10px 18px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; }
+  .btn-secondary:disabled{ opacity:.5; cursor:not-allowed; }
+  .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); padding:10px 18px; border-radius:var(--radius-sm); cursor:pointer; font-weight:600; }
+  .btn-danger{ background:var(--red); color:#fff; border:none; padding:10px 18px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; }
+  .btn-sm{ padding:6px 12px; font-size:.82rem; }
+  .link-btn{ background:none; border:none; color:var(--green-700); font-weight:600; cursor:pointer; padding:4px 6px; font-size:.85rem; }
+  .link-btn.danger{ color:var(--red); }
+  .icon-btn{ width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-size:1.05rem; color:var(--ink); }
+
+  /* ---------- Vender ---------- */
+  .vender-grid{ display:grid; grid-template-columns:1fr 360px; gap:24px; align-items:start; }
+  @media (max-width:880px){ .vender-grid{ grid-template-columns:1fr; } .cart-panel{ position:static; } }
+  .catalog-toolbar{ margin-bottom:16px; }
+  .input-search{ width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:var(--radius-sm); font-size:.95rem; background:var(--surface); color:var(--ink); }
+  .input-search-lg{ max-width:420px; margin-bottom:20px; }
+  .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .chip{ padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:.82rem; font-weight:600; cursor:pointer; }
+  .chip.active{ background:var(--green-600); border-color:var(--green-600); color:#fff; }
+
+  .product-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+  .product-card{
+    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+    padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-md);
+    background:var(--surface); cursor:pointer; text-align:left; width:100%;
+    transition:border-color .15s, transform .08s;
+  }
+  .product-card:hover{ border-color:var(--green-500); }
+  .product-card:active{ transform:scale(.98); }
+  .product-card:disabled{ opacity:.55; cursor:not-allowed; }
+  .product-card-cat{ font-size:.72rem; color:var(--ink-soft); }
+  .product-card-name{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:1rem; color:var(--ink); }
+  .product-card-price{ font-weight:700; font-variant-numeric:tabular-nums; color:var(--green-700); }
+
+  .stock-pill{ display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; font-size:.76rem; font-weight:600; }
+  .stock-ok{ background:var(--green-100); color:var(--green-700); }
+  .stock-low{ background:var(--amber-bg); color:var(--amber); }
+  .stock-out{ background:var(--red-bg); color:var(--red); }
+
+  .cart-panel{ position:sticky; top:96px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:20px; box-shadow:var(--shadow); }
+  .cart-title-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .cart-title{ font-size:1.05rem; }
+  .cart-items{ display:flex; flex-direction:column; gap:2px; max-height:320px; overflow-y:auto; margin-bottom:6px; }
+  .empty-hint{ color:var(--ink-soft); font-size:.88rem; padding:22px 4px; }
+  .cart-row{ display:grid; grid-template-columns:1fr auto auto auto; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .cart-row-main{ display:flex; flex-direction:column; min-width:0; }
+  .cart-row-name{ font-weight:600; font-size:.88rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cart-row-price{ font-size:.74rem; color:var(--ink-soft); }
+  .cart-row-qty{ display:flex; align-items:center; gap:6px; }
+  .qty-btn{ width:24px; height:24px; border-radius:6px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-size:1rem; line-height:1; color:var(--ink); }
+  .qty-value{ min-width:16px; text-align:center; font-variant-numeric:tabular-nums; font-weight:600; font-size:.88rem; }
+  .cart-row-subtotal{ font-weight:700; font-variant-numeric:tabular-nums; font-size:.88rem; }
+  .cart-row-remove{ background:none; border:none; color:var(--ink-soft); font-size:1.15rem; cursor:pointer; line-height:1; padding:0 2px; }
+  .cart-row-remove:hover{ color:var(--red); }
+
+  .cart-total-row{ display:flex; justify-content:space-between; align-items:baseline; padding:12px 0; border-top:1px solid var(--line); }
+  .cart-total-row strong{ font-family:'Space Grotesk',sans-serif; font-size:1.3rem; color:var(--green-700); font-variant-numeric:tabular-nums; }
+
+  .method-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+  .method-btn{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 4px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); cursor:pointer; font-size:.72rem; font-weight:600; color:var(--ink-soft); }
+  .method-btn.active{ border-color:var(--green-600); background:var(--surface-alt); color:var(--green-700); }
+
+  .cash-row{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; padding:12px; background:var(--surface-alt); border-radius:var(--radius-sm); }
+  .cash-row label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
+  .cash-row input{ padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:1rem; font-variant-numeric:tabular-nums; background:var(--surface); color:var(--ink); }
+  .change-line{ display:flex; justify-content:space-between; font-size:.9rem; margin-top:2px; }
+  .change-line strong{ color:var(--green-700); }
+  .btn-cobrar{ width:100%; padding:14px; font-size:1.02rem; border-radius:var(--radius-md); }
+
+  /* ---------- Tables (Inventario / Ventas) ---------- */
+  .table-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius-md); }
+  .data-table{ width:100%; border-collapse:collapse; min-width:620px; background:var(--surface); }
+  .data-table th{ text-align:left; font-size:.74rem; color:var(--ink-soft); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--surface-alt); }
+  .data-table td{ padding:12px 16px; border-bottom:1px solid var(--line); font-size:.89rem; }
+  .data-table tr:last-child td{ border-bottom:none; }
+  .data-table td.num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .data-table td.mono{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.8rem; color:var(--ink-soft); }
+  .row-actions{ display:flex; gap:14px; }
+  .empty-state{ display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:34px 12px; color:var(--ink-soft); }
+
+  /* ---------- Ventas del día ---------- */
+  .date-nav{ display:flex; align-items:center; gap:8px; }
+  #ventasDateInput{ padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+  .ventas-summary{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
+  @media (max-width:760px){ .ventas-summary{ grid-template-columns:repeat(2,1fr); } }
+  .summary-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
+  .summary-total{ background:var(--green-600); border-color:var(--green-600); }
+  .summary-total .summary-label, .summary-total .summary-sub{ color:rgba(255,255,255,.85); }
+  .summary-total .summary-value{ color:#fff; }
+  .summary-label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
+  .summary-value{ font-family:'Space Grotesk',sans-serif; font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .summary-sub{ font-size:.75rem; color:var(--ink-soft); }
+
+  /* ---------- Buscar ---------- */
+  .buscar-results{ display:flex; flex-direction:column; gap:10px; }
+  .buscar-row{ display:flex; align-items:center; gap:16px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); flex-wrap:wrap; }
+  .buscar-row-main{ display:flex; flex-direction:column; flex:1; min-width:160px; }
+  .buscar-row-name{ font-weight:600; }
+  .buscar-row-meta{ font-size:.8rem; color:var(--ink-soft); }
+  .buscar-row-price{ font-weight:700; color:var(--green-700); font-variant-numeric:tabular-nums; min-width:76px; text-align:right; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{ position:fixed; inset:0; background:rgba(10,20,14,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100; }
+  .modal{ background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:440px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px -20px rgba(0,0,0,.4); }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--line); }
+  .modal-header h3{ font-size:1.1rem; }
+  .modal-close{ background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--ink-soft); line-height:1; }
+  .modal-body{ padding:20px 22px; }
+  .modal-footer{ display:flex; justify-content:flex-end; gap:10px; padding:16px 22px; border-top:1px solid var(--line); }
+  .form-grid{ display:flex; flex-direction:column; gap:14px; }
+  .form-grid label{ display:flex; flex-direction:column; gap:6px; font-size:.85rem; font-weight:600; color:var(--ink-soft); }
+  .form-grid input, .form-grid select{ padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:.95rem; color:var(--ink); background:var(--surface); }
+
+  /* ---------- Toast ---------- */
+  #toastRoot{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:200; }
+  .toast{ background:var(--ink); color:var(--bg); padding:12px 20px; border-radius:999px; font-size:.9rem; font-weight:600; box-shadow:0 10px 30px -10px rgba(0,0,0,.4); }
+  .toast-success{ background:var(--green-700); color:#fff; }
+  .toast-warn{ background:var(--amber); color:#fff; }
+  .toast-error{ background:var(--red); color:#fff; }
+
+  /* ---------- Ticket lookup (Ventas del día) ---------- */
+  .ticket-lookup{ margin-bottom:18px; }
+  .ticket-lookup .input-search{ max-width:360px; }
+  #folioSearchResults{ display:none; margin-top:12px; }
+  #folioSearchResults.active{ display:block; }
+
+  /* ---------- Printable receipt ---------- */
+  #printReceipt{ display:none; }
+  @media print{
+    body *{ visibility:hidden; }
+    #printReceipt, #printReceipt *{ visibility:visible; }
+    #printReceipt{ display:block; position:absolute; top:0; left:0; width:100%; padding:12px; }
+  }
+  .ticket{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; max-width:280px; margin:0 auto; color:#000; }
+  .ticket h3{ text-align:center; margin:0 0 4px; font-size:14px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  .ticket p{ margin:2px 0; }
+  .ticket hr{ border:none; border-top:1px dashed #000; margin:6px 0; }
+  .ticket-table{ width:100%; border-collapse:collapse; margin:4px 0; }
+  .ticket-table td{ padding:1px 0; font-size:12px; }
+  .ticket-table td:last-child{ text-align:right; white-space:nowrap; }
+  .ticket-logo{ display:block; max-width:120px; max-height:60px; margin:0 auto 6px; object-fit:contain; }
+  .ticket-total{ font-weight:700; font-size:13px; }
+  .ticket-footer{ text-align:center; margin-top:10px; }
+
+  /* ---------- Vínculo con la nube / bloqueo por suspensión ---------- */
+  .block-overlay{ position:fixed; inset:0; background:var(--bg); z-index:500; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .block-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:32px; max-width:380px; text-align:center; }
+  .block-card h2{ margin-bottom:10px; }
+  .block-card p{ color:var(--ink-soft); font-size:.92rem; margin-bottom:18px; }
+  .block-card input{ width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:8px; margin-bottom:12px; text-align:center; font-size:1rem; background:var(--surface); color:var(--ink); }
+  .sync-pill{ display:inline-flex; align-items:center; gap:5px; font-size:.72rem; font-weight:600; color:var(--ink-soft); padding:4px 10px; border-radius:999px; background:var(--surface-alt); }
+  .sync-pill.pending{ color:var(--amber); }
+  .sync-pill.offline{ color:var(--red); }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5V3z"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="15.5" y2="11"/><line x1="8.5" y1="14.5" x2="12.5" y2="14.5"/></svg>
+      </span>
+      <img id="brandLogoImg" class="brand-logo" style="display:none;" alt="" />
+      <input id="businessNameInput" class="brand-name" maxlength="40" spellcheck="false" aria-label="Nombre del negocio" />
+      <span id="syncPill" class="sync-pill" style="display:none;"></span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Secciones">
+      <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="vender" role="tab" aria-selected="true">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5V3z"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="15.5" y2="11"/></svg>
+        <span>Vender</span>
+      </button>
+      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="inventario" role="tab" aria-selected="false">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/></svg>
+        <span>Inventario</span>
+      </button>
+      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="ventas" role="tab" aria-selected="false">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="20" x2="5" y2="12"/><line x1="12" y1="20" x2="12" y2="7"/><line x1="19" y1="20" x2="19" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
+        <span>Ventas del día</span>
+      </button>
+      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="buscar" role="tab" aria-selected="false">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></svg>
+        <span>Buscar</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="content">
+
+    <!-- VENDER -->
+    <section id="panel-vender" class="panel active" role="tabpanel">
+      <div class="vender-grid">
+        <div class="vender-catalog">
+          <div class="catalog-toolbar">
+            <input id="venderSearchInput" type="search" class="input-search" placeholder="Buscar producto por nombre o SKU…" />
+            <div id="categoryChips" class="chips"></div>
+          </div>
+          <div id="productGrid" class="product-grid"></div>
+        </div>
+        <aside class="cart-panel">
+          <div class="cart-title-row">
+            <h2 class="cart-title">Venta actual</h2>
+            <button type="button" class="link-btn" data-action="clear-cart">Vaciar</button>
+          </div>
+          <div id="cartItems" class="cart-items"></div>
+          <div id="cartSummaryArea"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- INVENTARIO -->
+    <section id="panel-inventario" class="panel" role="tabpanel">
+      <div class="panel-header">
+        <div>
+          <h2>Inventario</h2>
+          <p class="panel-subtitle">Consulta tus existencias y actualízalas cuando vendas o recibas mercancía.</p>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn-secondary" data-action="open-receive-stock">Recibir mercancía</button>
+          <button type="button" class="btn-primary" data-action="open-add-product">Agregar producto</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th><th>Acciones</th></tr></thead>
+          <tbody id="inventoryTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- VENTAS DEL DÍA -->
+    <section id="panel-ventas" class="panel" role="tabpanel">
+      <div class="panel-header">
+        <div>
+          <h2>Ventas del día</h2>
+          <p class="panel-subtitle">Total del día y desglose por método de pago.</p>
+        </div>
+        <div class="date-nav">
+          <button type="button" class="icon-btn" data-action="ventas-prev-day" aria-label="Día anterior">‹</button>
+          <input id="ventasDateInput" type="date" aria-label="Fecha" />
+          <button type="button" class="icon-btn" data-action="ventas-next-day" aria-label="Día siguiente">›</button>
+        </div>
+      </div>
+      <div class="ticket-lookup">
+        <input id="folioSearchInput" type="search" class="input-search" placeholder="Buscar ticket por folio, en cualquier fecha…" />
+        <div id="folioSearchResults"></div>
+      </div>
+      <div id="ventasSummary" class="ventas-summary"></div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Hora</th><th>Folio</th><th>Productos</th><th>Método</th><th class="num">Total</th><th>Acciones</th></tr></thead>
+          <tbody id="ventasTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- BUSCAR -->
+    <section id="panel-buscar" class="panel" role="tabpanel">
+      <div class="panel-header">
+        <div>
+          <h2>Buscar productos</h2>
+          <p class="panel-subtitle">Encuentra existencias y precios rápidamente, por nombre, categoría o SKU.</p>
+        </div>
+      </div>
+      <input id="buscarInput" type="search" class="input-search input-search-lg" placeholder="Escribe para buscar…" />
+      <div id="buscarResults" class="buscar-results"></div>
+    </section>
+
+  </main>
+
+  <div id="modalRoot"></div>
+  <div id="toastRoot" aria-live="polite"></div>
+  <div id="printReceipt"></div>
+  <div id="blockOverlayRoot"></div>
+
+<script>
+  // ---------- Icons (as strings, used inside JS-rendered markup) ----------
+  const ICON_CASH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><line x1="6" y1="9" x2="6" y2="9.01"/><line x1="18" y1="15" x2="18" y2="15.01"/></svg>';
+  const ICON_TRANSFER = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3.5-3.5"/><path d="M20 16H7l3.5 3.5"/></svg>';
+  const ICON_TERMINAL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="7" y1="14" x2="11" y2="14"/></svg>';
+
+  // ---------- State ----------
+  const STORAGE_KEY = 'posSuiteState_v1';
+
+  function defaultState(){
+    return {
+      businessName:'Mi Negocio', products:[], sales:[], nextFolio:1,
+      negocioId:null, negocioCodigo:null, estatusCache:'activo',
+      negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false,
+      pendingVentas:[], pendingMovimientos:[], snapshotDirty:false
+    };
+  }
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      return Object.assign(defaultState(), parsed);
+    }catch(e){
+      console.warn('No se pudo leer el almacenamiento local', e);
+      return defaultState();
+    }
+  }
+  function saveState(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){
+      console.warn('No se pudo guardar el almacenamiento local', e);
+      showToast('No se pudieron guardar los cambios en este dispositivo.', 'error');
+    }
+  }
+
+  let state = loadState();
+  let cart = [];
+  let activeCategory = 'Todas';
+  let venderSearch = '';
+  let selectedMethod = null;
+  let receivedDraft = '';
+  let ventasDate = todayStr();
+
+  // ======================================================================
+  // CONFIGURACIÓN DE LA NUBE — llenar una sola vez por instalación.
+  // Estos dos valores son los mismos para todos tus clientes (vienen de tu
+  // proyecto de Supabase); lo que cambia por negocio es el "código" que
+  // captura cada quien la primera vez que abre su punto de venta.
+  // ======================================================================
+  const SUPABASE_URL = 'https://waahxnhexfvpaypwsvqg.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_c9LODHYI87bNwTi2XaYKDw_dzvIKV2o';
+
+  const cloudEnabled = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 10;
+  const supabaseClient = (cloudEnabled && window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  // ---------- Vínculo con un negocio (código) ----------
+  function applyBrandLogo(){
+    const img = document.getElementById('brandLogoImg');
+    if(!img) return;
+    if(state.negocioLogoUrl){
+      img.src = state.negocioLogoUrl;
+      img.style.display = 'inline-block';
+    }else{
+      img.style.display = 'none';
+    }
+  }
+  function needsLinking(){ return cloudEnabled && !state.negocioId; }
+
+  function renderLinkScreen(){
+    const root = document.getElementById('blockOverlayRoot');
+    root.innerHTML = `
+      <div class="block-overlay">
+        <div class="block-card">
+          <h2>Vincula este negocio</h2>
+          <p>Captura el código que te dio tu proveedor para activar el respaldo en la nube.</p>
+          <input id="linkCodeInput" type="text" placeholder="Ej. FARM-COL-01" autocomplete="off" />
+          <button type="button" class="btn-primary" id="linkSubmitBtn" style="width:100%;">Vincular</button>
+          <p id="linkError" style="color:var(--red); font-size:.82rem; margin-top:10px; display:none;"></p>
+        </div>
+      </div>`;
+    document.getElementById('linkSubmitBtn').addEventListener('click', handleLinkSubmit);
+    document.getElementById('linkCodeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') handleLinkSubmit(); });
+  }
+  async function handleLinkSubmit(){
+    const input = document.getElementById('linkCodeInput');
+    const errorEl = document.getElementById('linkError');
+    const codigo = input.value.trim();
+    if(!codigo){ return; }
+    errorEl.style.display = 'none';
+    try{
+      const { data, error } = await supabaseClient
+        .from('negocios_estatus_publico')
+        .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket')
+        .eq('codigo', codigo)
+        .maybeSingle();
+      if(error || !data){
+        errorEl.textContent = 'No se encontró ese código. Revísalo con tu proveedor.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      state.negocioId = data.id;
+      state.negocioCodigo = data.codigo;
+      state.estatusCache = data.estatus;
+      state.negocioDireccion = data.direccion || '';
+      state.negocioTelefono = data.telefono || '';
+      state.negocioLogoUrl = data.logo_url || '';
+      state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
+      if(data.nombre_negocio){ state.businessName = data.nombre_negocio; }
+      saveState();
+
+      // Si este equipo no trae catálogo local (equipo nuevo / cambio de equipo),
+      // intenta recuperar el último respaldo guardado de este negocio.
+      if(state.products.length === 0){
+        try{
+          const { data: snap } = await supabaseClient
+            .from('inventario_snapshot')
+            .select('productos')
+            .eq('negocio_id', data.id)
+            .maybeSingle();
+          if(snap && Array.isArray(snap.productos) && snap.productos.length){
+            state.products = snap.productos;
+            saveState();
+          }
+        }catch(e){ /* si falla la recuperación, continúa con catálogo vacío */ }
+
+        try{
+          const { data: ventasCloud } = await supabaseClient
+            .from('ventas')
+            .select('*')
+            .eq('negocio_id', data.id)
+            .order('fecha_hora', {ascending:true});
+          if(ventasCloud && ventasCloud.length){
+            state.sales = ventasCloud.map(v=>({
+              id: v.id, folio: v.folio, dateISO: v.fecha_hora,
+              items: v.items, total: Number(v.total), method: v.metodo,
+              received: v.recibido!==null ? Number(v.recibido) : null,
+              change: v.cambio!==null ? Number(v.cambio) : null
+            }));
+            let maxFolio = 0;
+            state.sales.forEach(s=>{
+              const m = /V-(\d+)/.exec(s.folio || '');
+              if(m){ maxFolio = Math.max(maxFolio, parseInt(m[1],10)); }
+            });
+            state.nextFolio = maxFolio + 1;
+            saveState();
+          }
+        }catch(e){ /* si falla la recuperación, continúa sin historial */ }
+      }
+
+      state.snapshotDirty = true;
+      saveState();
+      document.getElementById('blockOverlayRoot').innerHTML = '';
+      init();
+    }catch(e){
+      errorEl.textContent = 'No se pudo conectar. Revisa tu internet e intenta de nuevo.';
+      errorEl.style.display = 'block';
+    }
+  }
+
+  // ---------- Revisión de estatus (activo / suspendido) ----------
+  function renderSuspendedScreen(){
+    document.getElementById('blockOverlayRoot').innerHTML = `
+      <div class="block-overlay">
+        <div class="block-card">
+          <h2>Servicio suspendido</h2>
+          <p>Este punto de venta está temporalmente suspendido. Contacta a tu proveedor para reactivarlo.</p>
+        </div>
+      </div>`;
+  }
+  function renderEliminadoScreen(){
+    document.getElementById('blockOverlayRoot').innerHTML = `
+      <div class="block-overlay">
+        <div class="block-card">
+          <h2>Este código ya no está activo</h2>
+          <p>Tu registro ya no existe en el sistema. Contacta a tu proveedor si crees que esto es un error.</p>
+        </div>
+      </div>`;
+  }
+  async function verificarEstatus(){
+    if(!cloudEnabled || !state.negocioId) return;
+    try{
+      const { data, error } = await supabaseClient
+        .from('negocios_estatus_publico')
+        .select('estatus, direccion, telefono, logo_url, mostrar_datos_ticket')
+        .eq('id', state.negocioId)
+        .maybeSingle();
+      if(error) return; // error real de conexión/permiso: no bloquear, se reintenta después
+      if(!data){
+        // consulta exitosa pero sin fila: el negocio fue eliminado — esto sí es definitivo
+        state.estatusCache = 'eliminado';
+        saveState();
+        renderEliminadoScreen();
+        return;
+      }
+      const wasSuspended = state.estatusCache === 'suspendido';
+      state.estatusCache = data.estatus;
+      state.negocioDireccion = data.direccion || '';
+      state.negocioTelefono = data.telefono || '';
+      state.negocioLogoUrl = data.logo_url || '';
+      state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
+      saveState();
+      applyBrandLogo();
+      if(data.estatus === 'suspendido'){
+        renderSuspendedScreen();
+      }else if(wasSuspended){
+        document.getElementById('blockOverlayRoot').innerHTML = '';
+        init();
+      }
+    }catch(e){ /* sin conexión: se revisará más tarde */ }
+  }
+
+  // ---------- Cola de sincronización (ventas, movimientos, catálogo) ----------
+  function updateSyncPill(){
+    const pill = document.getElementById('syncPill');
+    if(!pill || !cloudEnabled) return;
+    const pending = state.pendingVentas.length + state.pendingMovimientos.length + (state.snapshotDirty?1:0);
+    pill.style.display = 'inline-flex';
+    if(!navigator.onLine){ pill.className = 'sync-pill offline'; pill.textContent = '☁ Sin conexión'; }
+    else if(pending>0){ pill.className = 'sync-pill pending'; pill.textContent = `☁ Sincronizando… (${pending})`; }
+    else{ pill.className = 'sync-pill'; pill.textContent = '☁ Respaldado'; }
+  }
+  function markSnapshotDirty(){
+    if(!cloudEnabled) return;
+    state.snapshotDirty = true;
+    saveState();
+    flushSync();
+  }
+  function queueMovimiento(mov){
+    if(!cloudEnabled) return;
+    state.pendingMovimientos.push(mov);
+    saveState();
+    flushSync();
+  }
+  function queueVenta(sale){
+    if(!cloudEnabled) return;
+    state.pendingVentas.push(sale);
+    saveState();
+    flushSync();
+  }
+  let flushing = false;
+  async function flushSync(){
+    if(!cloudEnabled || !state.negocioId || flushing) { updateSyncPill(); return; }
+    if(!navigator.onLine){ updateSyncPill(); return; }
+    flushing = true;
+    try{
+      while(state.pendingVentas.length){
+        const v = state.pendingVentas[0];
+        const { error } = await supabaseClient.from('ventas').insert({
+          negocio_id: state.negocioId, folio: v.folio, fecha_hora: v.dateISO,
+          items: v.items, total: v.total, metodo: v.method, recibido: v.received, cambio: v.change
+        });
+        if(error) break;
+        state.pendingVentas.shift();
+        saveState();
+      }
+      while(state.pendingMovimientos.length){
+        const m = state.pendingMovimientos[0];
+        const { error } = await supabaseClient.from('movimientos_inventario').insert({
+          negocio_id: state.negocioId, producto_id: m.producto_id, producto_nombre: m.producto_nombre,
+          cantidad: m.cantidad, costo_unitario: m.costo_unitario
+        });
+        if(error) break;
+        state.pendingMovimientos.shift();
+        saveState();
+      }
+      if(state.snapshotDirty){
+        const { error } = await supabaseClient.from('inventario_snapshot').upsert({
+          negocio_id: state.negocioId, productos: state.products, updated_at: new Date().toISOString()
+        });
+        if(!error){ state.snapshotDirty = false; saveState(); }
+      }
+    }catch(e){ /* sin conexión: se reintentará después */ }
+    flushing = false;
+    updateSyncPill();
+  }
+  window.addEventListener('online', flushSync);
+  window.addEventListener('online', updateSyncPill);
+  window.addEventListener('offline', updateSyncPill);
+  if(cloudEnabled){ setInterval(flushSync, 30000); setInterval(verificarEstatus, 30000); }
+
+
+  // ---------- Helpers ----------
+  function uid(prefix){ return prefix + Math.random().toString(36).slice(2,9); }
+  function escapeHTML(str){
+    return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function formatMoney(n){
+    const num = Number(n)||0;
+    return '$' + num.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function todayStr(){ return toDateInputValue(new Date()); }
+  function toDateInputValue(d){
+    const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return `${y}-${mo}-${da}`;
+  }
+  function dateStrFromISO(iso){ return toDateInputValue(new Date(iso)); }
+  function methodLabel(m){
+    return m==='efectivo' ? 'Efectivo' : m==='transferencia' ? 'Transferencia' : m==='terminal' ? 'Terminal bancaria' : m;
+  }
+
+  // ---------- Product CRUD ----------
+  function bloqueadoPorSuspension(){
+    if(!cloudEnabled) return false;
+    if(state.estatusCache === 'eliminado'){ renderEliminadoScreen(); return true; }
+    if(state.estatusCache === 'suspendido'){ renderSuspendedScreen(); return true; }
+    return false;
+  }
+
+  function addProduct({name, category, sku, price, cost, stock, minStock}){
+    if(bloqueadoPorSuspension()) return;
+    const nuevo = {
+      id: uid('p_'), name: name.trim(), category: (category||'').trim() || 'General',
+      sku: (sku||'').trim(), price: Number(price), cost: Number(cost)||0, stock: Number(stock),
+      minStock: (minStock===undefined || minStock==='') ? 5 : Number(minStock)
+    };
+    state.products.push(nuevo);
+    saveState();
+    markSnapshotDirty();
+    if(nuevo.stock > 0){
+      queueMovimiento({ producto_id: nuevo.id, producto_nombre: nuevo.name, cantidad: nuevo.stock, costo_unitario: nuevo.cost });
+    }
+  }
+  function updateProduct(id, patch){
+    if(bloqueadoPorSuspension()) return;
+    const p = state.products.find(x=>x.id===id);
+    if(!p) return;
+    Object.assign(p, patch);
+    saveState();
+    markSnapshotDirty();
+  }
+  function deleteProduct(id){
+    if(bloqueadoPorSuspension()) return;
+    state.products = state.products.filter(p=>p.id!==id);
+    cart = cart.filter(c=>c.productId!==id);
+    saveState();
+    markSnapshotDirty();
+  }
+  function receiveStock(productId, qty, unitCost){
+    if(bloqueadoPorSuspension()) return;
+    const p = state.products.find(x=>x.id===productId);
+    if(!p) return;
+    p.stock += Number(qty);
+    if(unitCost!==undefined && unitCost!=='' && !isNaN(Number(unitCost))){ p.cost = Number(unitCost); }
+    saveState();
+    markSnapshotDirty();
+    queueMovimiento({
+      producto_id: p.id, producto_nombre: p.name, cantidad: Number(qty),
+      costo_unitario: (unitCost!==undefined && unitCost!=='') ? Number(unitCost) : (p.cost||0)
+    });
+  }
+
+  // ---------- Cart ----------
+  function addToCart(productId){
+    const p = state.products.find(x=>x.id===productId);
+    if(!p || p.stock<=0) return;
+    const existing = cart.find(c=>c.productId===productId);
+    if(existing){
+      if(existing.qty < p.stock){ existing.qty++; }
+      else{ showToast(`Solo hay ${p.stock} unidades disponibles de ${p.name}.`, 'warn'); }
+    }else{
+      cart.push({ productId:p.id, name:p.name, price:p.price, cost:p.cost||0, qty:1 });
+    }
+    renderCart();
+    renderVenderGrid();
+  }
+  function changeCartQty(productId, delta){
+    const item = cart.find(c=>c.productId===productId);
+    if(!item) return;
+    const p = state.products.find(x=>x.id===productId);
+    const maxStock = p ? p.stock : item.qty;
+    const newQty = item.qty + delta;
+    if(newQty<=0){ cart = cart.filter(c=>c.productId!==productId); }
+    else if(newQty>maxStock){ showToast(`Solo hay ${maxStock} unidades disponibles.`, 'warn'); }
+    else{ item.qty = newQty; }
+    renderCart();
+  }
+  function removeFromCart(productId){
+    cart = cart.filter(c=>c.productId!==productId);
+    renderCart();
+  }
+  function cartTotal(){
+    return cart.reduce((sum,c)=> sum + c.price*c.qty, 0);
+  }
+  function clearCart(){
+    cart = [];
+    selectedMethod = null;
+    receivedDraft = '';
+    renderCart();
+  }
+  function setMethod(method){
+    selectedMethod = method;
+    if(method!=='efectivo') receivedDraft = '';
+    renderCartSummary();
+  }
+
+  function completeSale(){
+    if(bloqueadoPorSuspension()) return;
+    if(cart.length===0){ showToast('Agrega al menos un producto para cobrar.', 'warn'); return; }
+    if(!selectedMethod){ showToast('Selecciona un método de pago.', 'warn'); return; }
+    const total = cartTotal();
+    let received = null, change = null;
+    if(selectedMethod==='efectivo'){
+      received = Number(receivedDraft || 0);
+      if(received < total){ showToast('El monto recibido es menor al total.', 'warn'); return; }
+      change = received - total;
+    }
+    for(const item of cart){
+      const p = state.products.find(x=>x.id===item.productId);
+      if(!p || p.stock < item.qty){ showToast(`Existencia insuficiente de ${item.name}.`, 'error'); return; }
+    }
+    cart.forEach(item=>{
+      const p = state.products.find(x=>x.id===item.productId);
+      p.stock -= item.qty;
+    });
+    const folio = 'V-' + String(state.nextFolio).padStart(4,'0');
+    state.sales.push({
+      id: uid('s_'), folio, dateISO: new Date().toISOString(),
+      items: cart.map(c=>({productId:c.productId, name:c.name, qty:c.qty, price:c.price, cost:c.cost||0})),
+      total, method:selectedMethod, received, change
+    });
+    state.nextFolio++;
+    saveState();
+    const savedSale = state.sales[state.sales.length-1];
+    queueVenta(savedSale);
+    markSnapshotDirty();
+    clearCart();
+    renderVenderGrid();
+    renderInventory();
+    renderVentas();
+    openSaleConfirmModal(savedSale);
+  }
+
+  // ---------- Rendering: Vender ----------
+  function renderCategoryChips(){
+    const el = document.getElementById('categoryChips');
+    const cats = Array.from(new Set(state.products.map(p=>p.category))).sort();
+    const all = ['Todas', ...cats];
+    el.innerHTML = all.map(c=>`<button type="button" class="chip ${activeCategory===c?'active':''}" data-action="category-chip" data-cat="${escapeHTML(c)}">${escapeHTML(c)}</button>`).join('');
+  }
+  function setCategory(cat){ activeCategory = cat; renderVenderGrid(); }
+
+  function renderVenderGrid(){
+    renderCategoryChips();
+    const grid = document.getElementById('productGrid');
+    if(state.products.length===0){
+      grid.innerHTML = `<div class="empty-state"><p>Aún no tienes productos registrados.</p><button type="button" class="btn-primary" data-action="goto-inventario">Ir a Inventario</button></div>`;
+      return;
+    }
+    const q = venderSearch.trim().toLowerCase();
+    const list = state.products.filter(p=>{
+      const matchesCat = activeCategory==='Todas' || p.category===activeCategory;
+      const matchesQ = !q || p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q);
+      return matchesCat && matchesQ;
+    });
+    if(list.length===0){
+      grid.innerHTML = `<div class="empty-state"><p>No hay productos que coincidan con la búsqueda.</p></div>`;
+      return;
+    }
+    grid.innerHTML = list.map(p=>{
+      const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
+      const badgeText = p.stock<=0 ? 'Sin existencia' : `${p.stock} en stock`;
+      return `<button type="button" class="product-card" data-action="add-to-cart" data-id="${p.id}" ${p.stock<=0?'disabled':''}>
+        <span class="product-card-cat">${escapeHTML(p.category)}</span>
+        <span class="product-card-name">${escapeHTML(p.name)}</span>
+        <span class="product-card-price">${formatMoney(p.price)}</span>
+        <span class="stock-pill stock-${level}">${badgeText}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function renderCartItems(){
+    const container = document.getElementById('cartItems');
+    if(cart.length===0){
+      container.innerHTML = `<p class="empty-hint">Toca un producto del catálogo para agregarlo a la venta.</p>`;
+      return;
+    }
+    container.innerHTML = cart.map(item=>`
+      <div class="cart-row">
+        <div class="cart-row-main">
+          <span class="cart-row-name">${escapeHTML(item.name)}</span>
+          <span class="cart-row-price">${formatMoney(item.price)} c/u</span>
+        </div>
+        <div class="cart-row-qty">
+          <button type="button" class="qty-btn" data-action="cart-dec" data-id="${item.productId}" aria-label="Quitar una unidad de ${escapeHTML(item.name)}">−</button>
+          <span class="qty-value">${item.qty}</span>
+          <button type="button" class="qty-btn" data-action="cart-inc" data-id="${item.productId}" aria-label="Agregar una unidad de ${escapeHTML(item.name)}">+</button>
+        </div>
+        <div class="cart-row-subtotal">${formatMoney(item.price*item.qty)}</div>
+        <button type="button" class="cart-row-remove" data-action="cart-remove" data-id="${item.productId}" aria-label="Eliminar ${escapeHTML(item.name)} de la venta">×</button>
+      </div>
+    `).join('');
+  }
+
+  function renderCartSummary(){
+    const area = document.getElementById('cartSummaryArea');
+    const total = cartTotal();
+    const methods = [
+      {id:'efectivo', label:'Efectivo', icon:ICON_CASH},
+      {id:'transferencia', label:'Transferencia', icon:ICON_TRANSFER},
+      {id:'terminal', label:'Terminal bancaria', icon:ICON_TERMINAL}
+    ];
+    let html = `<div class="cart-total-row"><span>Total</span><strong>${formatMoney(total)}</strong></div>`;
+    html += `<div class="method-row">`;
+    methods.forEach(m=>{
+      html += `<button type="button" class="method-btn ${selectedMethod===m.id?'active':''}" data-action="set-method" data-method="${m.id}">${m.icon}<span>${m.label}</span></button>`;
+    });
+    html += `</div>`;
+    if(selectedMethod==='efectivo'){
+      const change = Number(receivedDraft||0) - total;
+      html += `<div class="cash-row">
+        <label for="recibidoInput">Recibido</label>
+        <input id="recibidoInput" type="number" min="0" step="0.01" placeholder="0.00" value="${escapeHTML(receivedDraft)}" />
+        <div class="change-line"><span>Cambio</span><strong id="cambioValue">${formatMoney(Math.max(change,0))}</strong></div>
+      </div>`;
+    }
+    const disabled = cart.length===0 || !selectedMethod || (selectedMethod==='efectivo' && Number(receivedDraft||0) < total);
+    html += `<button type="button" class="btn-primary btn-cobrar" data-action="checkout" ${disabled?'disabled':''}>Cobrar${cart.length?' '+formatMoney(total):''}</button>`;
+    area.innerHTML = html;
+  }
+  function renderCart(){ renderCartItems(); renderCartSummary(); }
+
+  function updateChangeDisplay(){
+    const input = document.getElementById('recibidoInput');
+    if(!input) return;
+    receivedDraft = input.value;
+    const total = cartTotal();
+    const change = Number(receivedDraft||0) - total;
+    const cambioEl = document.getElementById('cambioValue');
+    if(cambioEl) cambioEl.textContent = formatMoney(Math.max(change,0));
+    const btn = document.querySelector('.btn-cobrar');
+    if(btn) btn.disabled = cart.length===0 || !selectedMethod || Number(receivedDraft||0) < total;
+  }
+
+  // ---------- Rendering: Inventario ----------
+  function renderInventory(){
+    const tbody = document.getElementById('inventoryTableBody');
+    if(state.products.length===0){
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay productos registrados todavía.</p><button type="button" class="btn-primary" data-action="open-add-product">Agregar el primero</button></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = state.products.map(p=>{
+      const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
+      const stockLabel = p.stock<=0 ? 'Agotado' : (p.stock<=p.minStock ? 'Stock bajo' : 'Disponible');
+      return `<tr>
+        <td>${escapeHTML(p.name)}</td>
+        <td>${escapeHTML(p.category)}</td>
+        <td class="mono">${escapeHTML(p.sku||'—')}</td>
+        <td class="num">${formatMoney(p.price)}</td>
+        <td><span class="stock-pill stock-${level}">${p.stock} · ${stockLabel}</span></td>
+        <td class="row-actions">
+          <button type="button" class="link-btn" data-action="edit-product" data-id="${p.id}">Editar</button>
+          <button type="button" class="link-btn danger" data-action="delete-product" data-id="${p.id}">Eliminar</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ---------- Modal ----------
+  function openModal(titleHTML, bodyHTML, footerHTML){
+    const root = document.getElementById('modalRoot');
+    root.innerHTML = `<div class="modal-overlay">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header"><h3>${titleHTML}</h3><button type="button" class="modal-close" data-action="close-modal" aria-label="Cerrar">×</button></div>
+        <div class="modal-body">${bodyHTML}</div>
+        <div class="modal-footer">${footerHTML}</div>
+      </div>
+    </div>`;
+  }
+  function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
+
+  function openSaleConfirmModal(sale){
+    openModal('Venta registrada', `
+      <p>Folio <strong>${sale.folio}</strong> por <strong>${formatMoney(sale.total)}</strong> (${methodLabel(sale.method)}).</p>
+      ${sale.method==='efectivo' ? `<p>Cambio a entregar: <strong>${formatMoney(sale.change)}</strong></p>` : ''}
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
+      <button type="button" class="btn-primary" data-action="print-ticket" data-id="${sale.id}">Imprimir ticket</button>
+    `);
+  }
+
+  function printReceipt(saleId){
+    const sale = state.sales.find(s=>s.id===saleId);
+    if(!sale){ showToast('No se encontró el ticket.', 'error'); return; }
+    const el = document.getElementById('printReceipt');
+    const d = new Date(sale.dateISO);
+    const dateStr = d.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const timeStr = d.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+    const mostrarExtra = cloudEnabled && state.mostrarDatosTicket;
+    const logoHTML = (mostrarExtra && state.negocioLogoUrl) ? `<img src="${state.negocioLogoUrl}" class="ticket-logo" alt="" />` : '';
+    const direccionHTML = (mostrarExtra && state.negocioDireccion) ? `<p>${escapeHTML(state.negocioDireccion)}</p>` : '';
+    const telefonoHTML = (mostrarExtra && state.negocioTelefono) ? `<p>Tel: ${escapeHTML(state.negocioTelefono)}</p>` : '';
+    el.innerHTML = `
+      <div class="ticket">
+        ${logoHTML}
+        <h3>${escapeHTML(state.businessName)}</h3>
+        ${direccionHTML}
+        ${telefonoHTML}
+        <p>${dateStr} · ${timeStr}</p>
+        <p>No. de ticket: ${sale.folio}</p>
+        <hr/>
+        <table class="ticket-table">
+          ${sale.items.map(i=>`<tr><td>${i.qty}x ${escapeHTML(i.name)}</td><td>${formatMoney(i.price*i.qty)}</td></tr>`).join('')}
+        </table>
+        <hr/>
+        <p class="ticket-total">Total: ${formatMoney(sale.total)}</p>
+        <p>Método: ${methodLabel(sale.method)}</p>
+        ${sale.method==='efectivo' ? `<p>Recibido: ${formatMoney(sale.received)} · Cambio: ${formatMoney(sale.change)}</p>` : ''}
+        <p class="ticket-footer">¡Gracias por su compra!</p>
+      </div>
+    `;
+    const logoImg = el.querySelector('.ticket-logo');
+    if(logoImg && !logoImg.complete){
+      let done = false;
+      const proceed = ()=>{ if(done) return; done = true; window.print(); };
+      logoImg.addEventListener('load', proceed);
+      logoImg.addEventListener('error', proceed);
+      setTimeout(proceed, 1500);
+    }else{
+      window.print();
+    }
+  }
+
+  function openAddProductModal(){
+    const cats = Array.from(new Set(state.products.map(p=>p.category)));
+    openModal('Agregar producto', `
+      <form id="addProductForm" class="form-grid">
+        <label>Nombre*<input required name="name" type="text" maxlength="60" /></label>
+        <label>Categoría<input name="category" type="text" maxlength="30" placeholder="General" list="categoryDatalistAdd" /></label>
+        <label>SKU / código<input name="sku" type="text" maxlength="30" /></label>
+        <label>Precio de venta*<input required name="price" type="number" min="0" step="0.01" placeholder="0.00" /></label>
+        <label>Costo por unidad<input name="cost" type="number" min="0" step="0.01" placeholder="0.00" /></label>
+        <label>Existencia inicial*<input required name="stock" type="number" min="0" step="1" placeholder="0" /></label>
+        <label>Stock mínimo (alerta)<input name="minStock" type="number" min="0" step="1" placeholder="5" /></label>
+      </form>
+      <datalist id="categoryDatalistAdd">${cats.map(c=>`<option value="${escapeHTML(c)}">`).join('')}</datalist>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="save-add-product">Guardar producto</button>
+    `);
+  }
+  function handleSaveAddProduct(){
+    const form = document.getElementById('addProductForm');
+    const name = form.name.value.trim();
+    const category = form.category.value.trim() || 'General';
+    const sku = form.sku.value.trim();
+    const price = Number(form.price.value);
+    const cost = form.cost.value === '' ? 0 : Number(form.cost.value);
+    const stock = Number(form.stock.value);
+    const minStock = form.minStock.value === '' ? 5 : Number(form.minStock.value);
+    if(!name){ showToast('Ingresa un nombre para el producto.', 'warn'); return; }
+    if(!(price>=0) || form.price.value===''){ showToast('Ingresa un precio válido.', 'warn'); return; }
+    if(!(stock>=0) || form.stock.value===''){ showToast('Ingresa una existencia válida.', 'warn'); return; }
+    addProduct({name, category, sku, price, cost, stock, minStock});
+    closeModal();
+    renderInventory(); renderVenderGrid();
+    showToast(`${name} agregado al inventario.`, 'success');
+  }
+
+  function openReceiveStockModal(){
+    if(state.products.length===0){ showToast('Primero agrega un producto al inventario.', 'warn'); return; }
+    const options = state.products.map(p=>`<option value="${p.id}">${escapeHTML(p.name)} (existencia actual: ${p.stock})</option>`).join('');
+    openModal('Recibir mercancía', `
+      <form id="receiveStockForm" class="form-grid">
+        <label>Producto*<select required name="productId">${options}</select></label>
+        <label>Cantidad recibida*<input required name="qty" type="number" min="1" step="1" placeholder="0" /></label>
+        <label>Costo por unidad (opcional, actualiza el costo del producto)<input name="unitCost" type="number" min="0" step="0.01" placeholder="0.00" /></label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="save-receive-stock">Registrar entrada</button>
+    `);
+  }
+  function handleSaveReceiveStock(){
+    const form = document.getElementById('receiveStockForm');
+    const productId = form.productId.value;
+    const qty = Number(form.qty.value);
+    const unitCost = form.unitCost.value;
+    if(!(qty>0)){ showToast('Ingresa una cantidad válida.', 'warn'); return; }
+    const p = state.products.find(x=>x.id===productId);
+    receiveStock(productId, qty, unitCost);
+    closeModal();
+    renderInventory(); renderVenderGrid();
+    showToast(`Se agregaron ${qty} unidades a ${p?escapeHTML(p.name):'producto'}.`, 'success');
+  }
+
+  function openEditProductModal(id){
+    const p = state.products.find(x=>x.id===id);
+    if(!p) return;
+    const cats = Array.from(new Set(state.products.map(pp=>pp.category)));
+    openModal('Editar producto', `
+      <form id="editProductForm" class="form-grid">
+        <label>Nombre*<input required name="name" type="text" maxlength="60" value="${escapeHTML(p.name)}" /></label>
+        <label>Categoría<input name="category" type="text" maxlength="30" value="${escapeHTML(p.category)}" list="categoryDatalistEdit" /></label>
+        <label>SKU / código<input name="sku" type="text" maxlength="30" value="${escapeHTML(p.sku||'')}" /></label>
+        <label>Precio de venta*<input required name="price" type="number" min="0" step="0.01" value="${p.price}" /></label>
+        <label>Costo por unidad<input name="cost" type="number" min="0" step="0.01" value="${p.cost||0}" /></label>
+        <label>Existencia*<input required name="stock" type="number" min="0" step="1" value="${p.stock}" /></label>
+        <label>Stock mínimo (alerta)<input name="minStock" type="number" min="0" step="1" value="${p.minStock}" /></label>
+      </form>
+      <datalist id="categoryDatalistEdit">${cats.map(c=>`<option value="${escapeHTML(c)}">`).join('')}</datalist>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="save-edit-product" data-id="${p.id}">Guardar cambios</button>
+    `);
+  }
+  function handleSaveEditProduct(id){
+    const form = document.getElementById('editProductForm');
+    const name = form.name.value.trim();
+    const category = form.category.value.trim() || 'General';
+    const sku = form.sku.value.trim();
+    const price = Number(form.price.value);
+    const cost = form.cost.value === '' ? 0 : Number(form.cost.value);
+    const stock = Number(form.stock.value);
+    const minStock = form.minStock.value === '' ? 5 : Number(form.minStock.value);
+    if(!name){ showToast('Ingresa un nombre para el producto.', 'warn'); return; }
+    if(!(price>=0) || !(stock>=0)){ showToast('Revisa el precio y la existencia.', 'warn'); return; }
+    updateProduct(id, {name, category, sku, price, cost, stock, minStock});
+    closeModal();
+    renderInventory(); renderVenderGrid();
+    showToast('Producto actualizado.', 'success');
+  }
+
+  function openDeleteConfirm(id){
+    const p = state.products.find(x=>x.id===id);
+    if(!p) return;
+    openModal('Eliminar producto', `<p>¿Seguro que quieres eliminar <strong>${escapeHTML(p.name)}</strong> del inventario? Esta acción no se puede deshacer.</p>`, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-danger" data-action="confirm-delete-product" data-id="${p.id}">Eliminar</button>
+    `);
+  }
+  function handleConfirmDeleteProduct(id){
+    deleteProduct(id);
+    closeModal();
+    renderInventory(); renderVenderGrid();
+    showToast('Producto eliminado.', 'success');
+  }
+
+  // ---------- Rendering: Ventas del día ----------
+  function renderVentas(){
+    const input = document.getElementById('ventasDateInput');
+    if(input && input.value !== ventasDate) input.value = ventasDate;
+    const daySales = state.sales.filter(s=> dateStrFromISO(s.dateISO) === ventasDate);
+    const total = daySales.reduce((sum,s)=> sum+s.total, 0);
+    const byMethod = {efectivo:0, transferencia:0, terminal:0};
+    daySales.forEach(s=>{ byMethod[s.method] = (byMethod[s.method]||0) + s.total; });
+
+    document.getElementById('ventasSummary').innerHTML = `
+      <div class="summary-card summary-total">
+        <span class="summary-label">Total del día</span>
+        <span class="summary-value">${formatMoney(total)}</span>
+        <span class="summary-sub">${daySales.length} venta${daySales.length===1?'':'s'}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Efectivo</span>
+        <span class="summary-value">${formatMoney(byMethod.efectivo||0)}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Transferencia</span>
+        <span class="summary-value">${formatMoney(byMethod.transferencia||0)}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Terminal bancaria</span>
+        <span class="summary-value">${formatMoney(byMethod.terminal||0)}</span>
+      </div>
+    `;
+
+    const tbody = document.getElementById('ventasTableBody');
+    if(daySales.length===0){
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No se registraron ventas este día.</p></div></td></tr>`;
+      return;
+    }
+    const sorted = [...daySales].sort((a,b)=> new Date(b.dateISO) - new Date(a.dateISO));
+    tbody.innerHTML = sorted.map(s=>{
+      const time = new Date(s.dateISO).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+      const itemsSummary = s.items.map(i=>`${i.qty}× ${escapeHTML(i.name)}`).join(', ');
+      return `<tr>
+        <td>${time}</td>
+        <td class="mono">${s.folio}</td>
+        <td>${itemsSummary}</td>
+        <td>${methodLabel(s.method)}</td>
+        <td class="num">${formatMoney(s.total)}</td>
+        <td><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button></td>
+      </tr>`;
+    }).join('');
+  }
+  function renderFolioSearch(query){
+    const container = document.getElementById('folioSearchResults');
+    const q = (query||'').trim().toLowerCase();
+    if(!q){ container.classList.remove('active'); container.innerHTML=''; return; }
+    container.classList.add('active');
+    const matches = state.sales.filter(s=> s.folio.toLowerCase().includes(q)).sort((a,b)=> new Date(b.dateISO)-new Date(a.dateISO));
+    if(matches.length===0){
+      container.innerHTML = `<div class="empty-state"><p>No se encontró ningún ticket con ese folio.</p></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="table-scroll"><table class="data-table">
+      <thead><tr><th>Fecha</th><th>Hora</th><th>Folio</th><th>Método</th><th class="num">Total</th><th>Acciones</th></tr></thead>
+      <tbody>${matches.map(s=>{
+        const d = new Date(s.dateISO);
+        const dateStr = d.toLocaleDateString('es-MX');
+        const timeStr = d.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+        return `<tr>
+          <td>${dateStr}</td><td>${timeStr}</td><td class="mono">${s.folio}</td><td>${methodLabel(s.method)}</td>
+          <td class="num">${formatMoney(s.total)}</td>
+          <td><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }
+  function shiftVentasDate(delta){
+    const d = new Date(ventasDate + 'T00:00:00');
+    d.setDate(d.getDate()+delta);
+    ventasDate = toDateInputValue(d);
+    renderVentas();
+  }
+
+  // ---------- Rendering: Buscar ----------
+  function renderBuscarResults(query){
+    const container = document.getElementById('buscarResults');
+    if(state.products.length===0){
+      container.innerHTML = `<div class="empty-state"><p>Aún no tienes productos registrados.</p></div>`;
+      return;
+    }
+    const q = (query||'').trim().toLowerCase();
+    if(!q){
+      container.innerHTML = `<div class="empty-state"><p>Escribe para buscar entre tus ${state.products.length} productos.</p></div>`;
+      return;
+    }
+    const results = state.products.filter(p=>
+      p.name.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q) ||
+      (p.sku||'').toLowerCase().includes(q)
+    );
+    if(results.length===0){
+      container.innerHTML = `<div class="empty-state"><p>No se encontraron productos que coincidan con «${escapeHTML(query)}».</p></div>`;
+      return;
+    }
+    container.innerHTML = results.map(p=>{
+      const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
+      return `<div class="buscar-row">
+        <div class="buscar-row-main">
+          <span class="buscar-row-name">${escapeHTML(p.name)}</span>
+          <span class="buscar-row-meta">${escapeHTML(p.category)}${p.sku?' · '+escapeHTML(p.sku):''}</span>
+        </div>
+        <span class="stock-pill stock-${level}">${p.stock} en stock</span>
+        <span class="buscar-row-price">${formatMoney(p.price)}</span>
+        <button type="button" class="btn-secondary btn-sm" data-action="quick-add-from-search" data-id="${p.id}" ${p.stock<=0?'disabled':''}>Agregar a venta</button>
+      </div>`;
+    }).join('');
+  }
+
+  // ---------- Tabs ----------
+  function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(b=>{
+      const isActive = b.dataset.tab===tab;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('.panel').forEach(p=> p.classList.toggle('active', p.id === 'panel-'+tab));
+    if(tab==='ventas') renderVentas();
+    if(tab==='buscar'){ const inp = document.getElementById('buscarInput'); renderBuscarResults(inp?inp.value:''); }
+  }
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function showToast(message, type){
+    const root = document.getElementById('toastRoot');
+    root.innerHTML = `<div class="toast toast-${type||'info'}">${escapeHTML(message)}</div>`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>{ root.innerHTML=''; }, 3200);
+  }
+
+  // ---------- Delegated events ----------
+  document.addEventListener('click', function(e){
+    if(e.target.classList && e.target.classList.contains('modal-overlay')){
+      closeModal();
+      return;
+    }
+    const btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    switch(action){
+      case 'switch-tab': switchTab(btn.dataset.tab); break;
+      case 'goto-inventario': switchTab('inventario'); break;
+      case 'add-to-cart': addToCart(id); break;
+      case 'cart-inc': changeCartQty(id, 1); break;
+      case 'cart-dec': changeCartQty(id, -1); break;
+      case 'cart-remove': removeFromCart(id); break;
+      case 'clear-cart': clearCart(); break;
+      case 'set-method': setMethod(btn.dataset.method); break;
+      case 'checkout': completeSale(); break;
+      case 'open-add-product': openAddProductModal(); break;
+      case 'open-receive-stock': openReceiveStockModal(); break;
+      case 'edit-product': openEditProductModal(id); break;
+      case 'delete-product': openDeleteConfirm(id); break;
+      case 'close-modal': closeModal(); break;
+      case 'category-chip': setCategory(btn.dataset.cat); break;
+      case 'quick-add-from-search':
+        addToCart(id);
+        switchTab('vender');
+        showToast('Producto agregado a la venta actual.', 'success');
+        break;
+      case 'save-add-product': handleSaveAddProduct(); break;
+      case 'save-receive-stock': handleSaveReceiveStock(); break;
+      case 'save-edit-product': handleSaveEditProduct(id); break;
+      case 'confirm-delete-product': handleConfirmDeleteProduct(id); break;
+      case 'ventas-prev-day': shiftVentasDate(-1); break;
+      case 'ventas-next-day': shiftVentasDate(1); break;
+      case 'print-ticket': printReceipt(id); break;
+    }
+  });
+
+  document.addEventListener('input', function(e){
+    if(e.target.id==='venderSearchInput'){ venderSearch = e.target.value; renderVenderGrid(); }
+    else if(e.target.id==='buscarInput'){ renderBuscarResults(e.target.value); }
+    else if(e.target.id==='recibidoInput'){ updateChangeDisplay(); }
+    else if(e.target.id==='folioSearchInput'){ renderFolioSearch(e.target.value); }
+  });
+
+  document.addEventListener('change', function(e){
+    if(e.target.id==='ventasDateInput'){ ventasDate = e.target.value; renderVentas(); }
+  });
+
+  // ---------- Init ----------
+  function init(){
+    const nameInput = document.getElementById('businessNameInput');
+    nameInput.value = state.businessName;
+    document.title = state.businessName + ' · Punto de Venta';
+    nameInput.addEventListener('change', function(){
+      state.businessName = nameInput.value.trim() || 'Mi Negocio';
+      nameInput.value = state.businessName;
+      saveState();
+      document.title = state.businessName + ' · Punto de Venta';
+    });
+
+    document.getElementById('ventasDateInput').value = ventasDate;
+
+    renderVenderGrid();
+    renderCart();
+    renderInventory();
+    renderVentas();
+    renderBuscarResults('');
+    applyBrandLogo();
+    updateSyncPill();
+    if(cloudEnabled && state.negocioId){
+      verificarEstatus();
+      flushSync();
+    }
+  }
+
+  function boot(){
+    if(needsLinking()){ renderLinkScreen(); return; }
+    if(cloudEnabled && state.estatusCache === 'eliminado'){ renderEliminadoScreen(); verificarEstatus(); return; }
+    if(cloudEnabled && state.estatusCache === 'suspendido'){ renderSuspendedScreen(); verificarEstatus(); return; }
+    init();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+
+</html>

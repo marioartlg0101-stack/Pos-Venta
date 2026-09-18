@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Panel de Clientes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --bg:#F3FBF6; --surface:#FFFFFF; --surface-alt:#EAFBF1;
+    --ink:#152A1E; --ink-soft:#5D7368;
+    --green-500:#22C55E; --green-600:#16A34A; --green-700:#127A3A; --green-100:#D8F7E4;
+    --line:#DFEFE5; --red:#DC2626; --red-bg:#FDECEC; --amber:#B45309; --amber-bg:#FEF3C7;
+    --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+    --shadow:0 1px 2px rgba(21,42,30,.06), 0 12px 28px -16px rgba(21,42,30,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1712; --surface:#142019; --surface-alt:#16281F; --ink:#EAF3EC; --ink-soft:#9FB6A8;
+      --green-500:#34D399; --green-600:#22C55E; --green-700:#3ADB86; --green-100:#1C3A2A;
+      --line:#223226; --red:#F87171; --red-bg:#3B1616; --amber:#FBBF24; --amber-bg:#3A2A0E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1712; --surface:#142019; --surface-alt:#16281F; --ink:#EAF3EC; --ink-soft:#9FB6A8;
+    --green-500:#34D399; --green-600:#22C55E; --green-700:#3ADB86; --green-100:#1C3A2A;
+    --line:#223226; --red:#F87171; --red-bg:#3B1616; --amber:#FBBF24; --amber-bg:#3A2A0E;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; min-height:100vh; }
+  h1,h2,h3{ font-family:'Space Grotesk',sans-serif; margin:0; }
+  button,input,select{ font-family:inherit; }
+  :focus-visible{ outline:2px solid var(--green-600); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+
+  .topbar{ position:sticky; top:0; z-index:10; background:var(--surface); border-bottom:1px solid var(--line); padding:14px 28px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .brand{ display:flex; align-items:center; gap:10px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.1rem; }
+  .brand svg{ color:var(--green-600); }
+  .content{ max-width:1100px; margin:0 auto; padding:28px; }
+
+  .btn-primary{ background:var(--green-600); color:#fff; border:none; padding:11px 20px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; font-size:.95rem; }
+  .btn-primary:hover{ background:var(--green-700); }
+  .btn-primary:disabled{ background:var(--line); color:var(--ink-soft); cursor:not-allowed; }
+  .btn-secondary{ background:var(--surface-alt); color:var(--green-700); border:1px solid var(--green-100); padding:10px 18px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; }
+  .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); padding:10px 18px; border-radius:var(--radius-sm); cursor:pointer; font-weight:600; }
+  .btn-danger{ background:var(--red); color:#fff; border:none; padding:10px 18px; border-radius:var(--radius-sm); font-weight:600; cursor:pointer; }
+  .btn-sm{ padding:6px 12px; font-size:.82rem; }
+  .link-btn{ background:none; border:none; color:var(--green-700); font-weight:600; cursor:pointer; padding:4px 6px; font-size:.85rem; }
+
+  .login-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:32px; width:100%; max-width:360px; }
+  .login-card h1{ font-size:1.3rem; margin-bottom:6px; text-align:center; }
+  .login-card p{ color:var(--ink-soft); font-size:.88rem; text-align:center; margin-bottom:20px; }
+  .form-grid{ display:flex; flex-direction:column; gap:14px; }
+  .form-grid label{ display:flex; flex-direction:column; gap:6px; font-size:.85rem; font-weight:600; color:var(--ink-soft); }
+  .form-grid input, .form-grid select{ padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:.95rem; color:var(--ink); background:var(--surface); }
+  .error-text{ color:var(--red); font-size:.82rem; margin-top:10px; }
+
+  .summary-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+  @media (max-width:700px){ .summary-row{ grid-template-columns:1fr; } }
+  .summary-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:16px 18px; }
+  .summary-card.warn{ border-color:var(--amber); background:var(--amber-bg); }
+  .summary-card.danger{ border-color:var(--red); background:var(--red-bg); }
+  .summary-label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
+  .summary-value{ font-family:'Space Grotesk',sans-serif; font-size:1.6rem; font-weight:700; }
+
+  .panel-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px; }
+  .table-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
+  .data-table{ width:100%; border-collapse:collapse; min-width:680px; }
+  .data-table th{ text-align:left; font-size:.74rem; color:var(--ink-soft); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--surface-alt); }
+  .data-table td{ padding:12px 16px; border-bottom:1px solid var(--line); font-size:.89rem; }
+  .data-table tr:last-child td{ border-bottom:none; }
+  .data-table td.num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .row-actions{ display:flex; gap:12px; }
+
+  .status-pill{ display:inline-flex; padding:3px 10px; border-radius:999px; font-size:.76rem; font-weight:600; }
+  .status-activo{ background:var(--green-100); color:var(--green-700); }
+  .status-suspendido{ background:var(--red-bg); color:var(--red); }
+  .due-soon{ color:var(--amber); font-weight:600; }
+  .due-over{ color:var(--red); font-weight:600; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(10,20,14,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:var(--radius-lg); width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px -20px rgba(0,0,0,.4); margin:auto; }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; padding:18px 22px; border-bottom:1px solid var(--line); }
+  .modal-header h3{ font-size:1.1rem; }
+  .modal-close{ background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--ink-soft); }
+  .modal-body{ padding:20px 22px; }
+  .modal-footer{ display:flex; justify-content:flex-end; gap:10px; padding:16px 22px; border-top:1px solid var(--line); }
+
+  .detail-section{ margin-bottom:22px; }
+  .detail-section h4{ font-family:'Space Grotesk',sans-serif; font-size:.95rem; margin-bottom:10px; }
+  .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:.88rem; }
+  .detail-grid div span{ display:block; color:var(--ink-soft); font-size:.76rem; }
+  .report-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px; }
+  .report-card{ background:var(--surface-alt); border-radius:var(--radius-sm); padding:12px 14px; }
+  .report-card .v{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.1rem; }
+  .empty-state{ padding:30px; text-align:center; color:var(--ink-soft); }
+  #toastRoot{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:200; }
+  .toast{ background:var(--ink); color:var(--bg); padding:12px 20px; border-radius:999px; font-size:.9rem; font-weight:600; box-shadow:0 10px 30px -10px rgba(0,0,0,.4); }
+  .toast-success{ background:var(--green-700); color:#fff; }
+  .toast-warn{ background:var(--amber); color:#fff; }
+  .toast-error{ background:var(--red); color:#fff; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="modalRoot"></div>
+  <div id="toastRoot" aria-live="polite"></div>
+
+<script>
+  // ======================================================================
+  // CONFIGURACIÓN — los mismos valores que en el punto de venta.
+  // ======================================================================
+  const SUPABASE_URL = 'https://waahxnhexfvpaypwsvqg.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_c9LODHYI87bNwTi2XaYKDw_dzvIKV2o';
+  const cloudEnabled = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 10;
+  let supabaseClient = null;
+  if(cloudEnabled){
+    try{ supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
+    catch(e){ console.error('Supabase no se pudo inicializar:', e); }
+  }
+
+  function renderNotConfigured(){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <div class="login-card">
+          <h1>Falta configurar este panel</h1>
+          <p>Edita las líneas <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> al inicio del archivo con los datos de tu proyecto de Supabase, guarda el archivo y vuelve a abrirlo.</p>
+        </div>
+      </div>`;
+  }
+
+  let session = null;
+  let negocios = [];
+  let activeNegocioId = null;
+
+  function escapeHTML(str){
+    return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function formatMoney(n){
+    return '$' + (Number(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function addMonths(dateStr, n){
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setMonth(d.getMonth()+n);
+    return d.toISOString().slice(0,10);
+  }
+  function diasRestantes(fecha){
+    if(!fecha) return null;
+    const hoy = new Date(todayStr()+'T00:00:00');
+    const venc = new Date(fecha+'T00:00:00');
+    return Math.round((venc-hoy)/86400000);
+  }
+  let toastTimer=null;
+  function showToast(msg, type){
+    const root = document.getElementById('toastRoot');
+    root.innerHTML = `<div class="toast toast-${type||'info'}">${escapeHTML(msg)}</div>`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>{ root.innerHTML=''; }, 3200);
+  }
+
+  // ---------------------------------------------------------------- Login
+  function renderLogin(errorMsg){
+    document.getElementById('app').innerHTML = `
+      <div class="login-wrap">
+        <div class="login-card">
+          <h1>Panel de Clientes</h1>
+          <p>Inicia sesión con tu cuenta de administrador.</p>
+          <form id="loginForm" class="form-grid">
+            <label>Correo<input required type="email" name="email" /></label>
+            <label>Contraseña<input required type="password" name="password" /></label>
+            <button type="submit" class="btn-primary" style="width:100%;">Entrar</button>
+          </form>
+          ${errorMsg ? `<p class="error-text">${escapeHTML(errorMsg)}</p>` : ''}
+        </div>
+      </div>`;
+    document.getElementById('loginForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const email = e.target.email.value.trim();
+      const password = e.target.password.value;
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if(error){ renderLogin('Correo o contraseña incorrectos.'); return; }
+      session = data.session;
+      loadDashboard();
+    });
+  }
+
+  // ------------------------------------------------------------ Dashboard
+  async function loadDashboard(){
+    document.getElementById('app').innerHTML = `<div class="content"><p>Cargando…</p></div>`;
+    const { data, error } = await supabaseClient.from('negocios').select('*').order('nombre_negocio');
+    if(error){ showToast('No se pudieron cargar los negocios.', 'error'); negocios = []; }
+    else{ negocios = data || []; }
+    renderApp();
+  }
+
+  function renderApp(){
+    const porVencer = negocios.filter(n=> n.estatus==='activo' && diasRestantes(n.fecha_proximo_pago)!==null && diasRestantes(n.fecha_proximo_pago)<=3 && diasRestantes(n.fecha_proximo_pago)>=0);
+    const vencidos = negocios.filter(n=> n.estatus==='activo' && diasRestantes(n.fecha_proximo_pago)!==null && diasRestantes(n.fecha_proximo_pago)<0);
+
+    document.getElementById('app').innerHTML = `
+      <header class="topbar">
+        <div class="brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5V3z"/><line x1="8.5" y1="7.5" x2="15.5" y2="7.5"/><line x1="8.5" y1="11" x2="15.5" y2="11"/></svg>
+          <span>Panel de Clientes</span>
+        </div>
+        <button type="button" class="btn-ghost btn-sm" id="logoutBtn">Cerrar sesión</button>
+      </header>
+      <main class="content">
+        <div class="summary-row">
+          <div class="summary-card">
+            <span class="summary-label">Clientes activos</span>
+            <span class="summary-value">${negocios.filter(n=>n.estatus==='activo').length}</span>
+          </div>
+          <div class="summary-card ${porVencer.length?'warn':''}">
+            <span class="summary-label">Por vencer (3 días o menos)</span>
+            <span class="summary-value">${porVencer.length}</span>
+          </div>
+          <div class="summary-card ${vencidos.length?'danger':''}">
+            <span class="summary-label">Vencidos</span>
+            <span class="summary-value">${vencidos.length}</span>
+          </div>
+        </div>
+
+        <div class="panel-header">
+          <h2>Clientes</h2>
+          <button type="button" class="btn-primary" id="newClientBtn">Nuevo cliente</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Negocio</th><th>Giro</th><th>Código</th><th>Estatus</th><th>Próximo pago</th><th>Acciones</th></tr></thead>
+            <tbody id="clientsTableBody"></tbody>
+          </table>
+        </div>
+      </main>`;
+
+    document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+      await supabaseClient.auth.signOut();
+      session = null;
+      renderLogin();
+    });
+    document.getElementById('newClientBtn').addEventListener('click', openNewClientModal);
+    renderClientsTable();
+  }
+
+  function renderClientsTable(){
+    const tbody = document.getElementById('clientsTableBody');
+    if(!tbody) return;
+    if(negocios.length===0){
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">Aún no tienes clientes registrados.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = negocios.map(n=>{
+      const dias = diasRestantes(n.fecha_proximo_pago);
+      let vencInfo = n.fecha_proximo_pago ? n.fecha_proximo_pago : 'Sin pagos';
+      let vencClass = '';
+      if(n.estatus==='activo' && dias!==null){
+        if(dias<0){ vencInfo += ` · vencido hace ${Math.abs(dias)} día(s)`; vencClass='due-over'; }
+        else if(dias<=3){ vencInfo += ` · vence en ${dias} día(s)`; vencClass='due-soon'; }
+      }
+      return `<tr>
+        <td>${escapeHTML(n.nombre_negocio)}</td>
+        <td>${escapeHTML(n.giro||'—')}</td>
+        <td>${escapeHTML(n.codigo)}</td>
+        <td><span class="status-pill status-${n.estatus}">${n.estatus==='activo'?'Activo':'Suspendido'}</span></td>
+        <td class="${vencClass}">${escapeHTML(vencInfo)}</td>
+        <td class="row-actions"><button type="button" class="link-btn" data-open-client="${n.id}">Ver</button></td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-open-client]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openClientDetail(btn.dataset.openClient));
+    });
+  }
+
+  // ------------------------------------------------------------- Modales
+  function openModal(titleHTML, bodyHTML, footerHTML){
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" role="dialog" aria-modal="true">
+          <div class="modal-header"><h3>${titleHTML}</h3><button type="button" class="modal-close" id="modalCloseBtn">×</button></div>
+          <div class="modal-body">${bodyHTML}</div>
+          <div class="modal-footer">${footerHTML}</div>
+        </div>
+      </div>`;
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeModal(); });
+  }
+  function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+  function sugerirCodigo(giro, nombre){
+    const base = (giro||nombre||'NEG').toUpperCase().replace(/[^A-Z]/g,'').slice(0,4) || 'NEG';
+    return `${base}-${String(negocios.length+1).padStart(2,'0')}`;
+  }
+
+  function openNewClientModal(){
+    openModal('Nuevo cliente', `
+      <form id="newClientForm" class="form-grid">
+        <label>Nombre del negocio*<input required name="nombre_negocio" type="text" /></label>
+        <label>Giro (farmacia, cafetería, tienda de ropa…)<input name="giro" type="text" /></label>
+        <label>Nombre de contacto<input name="nombre_contacto" type="text" /></label>
+        <label>Teléfono<input name="telefono" type="tel" /></label>
+        <label>Dirección<input name="direccion" type="text" /></label>
+        <label>Logotipo (opcional)<input name="logo" type="file" accept="image/*" /></label>
+        <label>Precio mensual*<input required name="precio_mensual" type="number" min="0" step="0.01" value="299" /></label>
+        <label>Código para su punto de venta*<input required name="codigo" type="text" placeholder="Ej. FARM-01" /></label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" id="cancelNewClient">Cancelar</button>
+      <button type="button" class="btn-primary" id="saveNewClient">Guardar cliente</button>
+    `);
+    const form = document.getElementById('newClientForm');
+    form.giro.addEventListener('blur', ()=>{ if(!form.codigo.value) form.codigo.value = sugerirCodigo(form.giro.value, form.nombre_negocio.value); });
+    document.getElementById('cancelNewClient').addEventListener('click', closeModal);
+    document.getElementById('saveNewClient').addEventListener('click', async ()=>{
+      const nombre_negocio = form.nombre_negocio.value.trim();
+      const codigo = form.codigo.value.trim();
+      if(!nombre_negocio || !codigo){ showToast('Nombre y código son obligatorios.', 'warn'); return; }
+      let logo_url = null;
+      const logoFile = form.logo.files[0];
+      if(logoFile){
+        const ext = (logoFile.name.split('.').pop() || 'png').toLowerCase();
+        const path = `${codigo}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabaseClient.storage.from('logos').upload(path, logoFile, { upsert:true });
+        if(upErr){ showToast('No se pudo subir el logotipo: ' + upErr.message, 'error'); return; }
+        const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
+        logo_url = urlData.publicUrl;
+      }
+      const { error } = await supabaseClient.from('negocios').insert({
+        nombre_negocio, giro: form.giro.value.trim(), nombre_contacto: form.nombre_contacto.value.trim(),
+        telefono: form.telefono.value.trim(), direccion: form.direccion.value.trim(),
+        precio_mensual: Number(form.precio_mensual.value)||299,
+        codigo, estatus:'activo', logo_url
+      });
+      if(error){ showToast(error.message.includes('duplicate') ? 'Ese código ya está en uso.' : 'No se pudo guardar.', 'error'); return; }
+      closeModal();
+      showToast('Cliente agregado. Dale ese código al instalarle su punto de venta.', 'success');
+      loadDashboard();
+    });
+  }
+
+  async function openClientDetail(negocioId){
+    activeNegocioId = negocioId;
+    const negocio = negocios.find(n=>n.id===negocioId);
+    if(!negocio) return;
+    const { data: pagos } = await supabaseClient.from('pagos').select('*').eq('negocio_id', negocioId).order('fecha', {ascending:false});
+    const dias = diasRestantes(negocio.fecha_proximo_pago);
+
+    openModal(escapeHTML(negocio.nombre_negocio), `
+      <div class="detail-section">
+        <div class="detail-grid">
+          <div><span>Giro</span>${escapeHTML(negocio.giro||'—')}</div>
+          <div><span>Código</span>${escapeHTML(negocio.codigo)}</div>
+          <div><span>Contacto</span>${escapeHTML(negocio.nombre_contacto||'—')} · ${escapeHTML(negocio.telefono||'—')}</div>
+          <div><span>Precio mensual</span>${formatMoney(negocio.precio_mensual)}</div>
+          <div><span>Estatus</span><span class="status-pill status-${negocio.estatus}">${negocio.estatus==='activo'?'Activo':'Suspendido'}</span></div>
+          <div><span>Próximo pago</span>${negocio.fecha_proximo_pago || 'Sin pagos'}${dias!==null && negocio.estatus==='activo' ? (dias<0 ? ` (vencido hace ${Math.abs(dias)}d)` : ` (${dias}d)`) : ''}</div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h4>Ticket y marca</h4>
+        <div class="form-grid" style="gap:10px;">
+          <label>Dirección<input id="editDireccion" type="text" value="${escapeHTML(negocio.direccion||'')}" /></label>
+          <label>Logotipo${negocio.logo_url ? ' (subir uno reemplaza el actual)' : ''}<input id="editLogoFile" type="file" accept="image/*" /></label>
+          ${negocio.logo_url ? `<img src="${negocio.logo_url}" alt="Logo actual" style="max-height:48px; max-width:120px; object-fit:contain;" />` : `<p style="font-size:.82rem; color:var(--ink-soft);">Sin logotipo todavía.</p>`}
+          <button type="button" class="btn-secondary btn-sm" id="saveTicketInfoBtn" style="align-self:flex-start;">Guardar dirección / logo</button>
+        </div>
+        <div style="margin-top:16px;">
+          <span class="summary-label">Datos completos en el ticket</span>
+          <p style="font-size:.85rem; margin:4px 0 10px;">${negocio.mostrar_datos_ticket ? 'Autorizado: el ticket muestra logo, dirección y teléfono.' : 'No autorizado: el ticket solo muestra el nombre del negocio.'}</p>
+          <button type="button" class="btn-${negocio.mostrar_datos_ticket ? 'ghost' : 'primary'} btn-sm" id="toggleTicketAuthBtn">${negocio.mostrar_datos_ticket ? 'Quitar autorización' : 'Autorizar'}</button>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h4>Pagos</h4>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Fecha</th><th>Método</th><th>Cubre hasta</th><th class="num">Monto</th></tr></thead>
+            <tbody>${(pagos&&pagos.length) ? pagos.map(p=>`<tr><td>${p.fecha}</td><td>${escapeHTML(p.metodo||'—')}</td><td>${p.cubre_hasta}</td><td class="num">${formatMoney(p.monto)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty-state">Sin pagos registrados.</div></td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h4>Reporte a solicitud</h4>
+        <div class="form-grid" style="flex-direction:row; gap:10px; align-items:flex-end;">
+          <label style="flex:1;">Desde<input id="reportFrom" type="date" /></label>
+          <label style="flex:1;">Hasta<input id="reportTo" type="date" /></label>
+          <button type="button" class="btn-secondary btn-sm" id="genReportBtn">Generar</button>
+        </div>
+        <div id="reportOutput"></div>
+      </div>
+    `, `
+      <button type="button" class="btn-ghost" id="closeDetail">Cerrar</button>
+      ${negocio.estatus==='activo'
+        ? `<button type="button" class="btn-danger" id="suspendBtn">Suspender servicio</button>`
+        : `<button type="button" class="btn-primary" id="reactivateBtn">Reactivar servicio</button>`}
+      <button type="button" class="btn-primary" id="registerPaymentBtn">Registrar pago</button>
+    `);
+
+    document.getElementById('closeDetail').addEventListener('click', closeModal);
+    document.getElementById('registerPaymentBtn').addEventListener('click', ()=> openPaymentModal(negocio));
+    document.getElementById('saveTicketInfoBtn').addEventListener('click', async ()=>{
+      const direccion = document.getElementById('editDireccion').value.trim();
+      const file = document.getElementById('editLogoFile').files[0];
+      let logo_url = negocio.logo_url;
+      if(file){
+        const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+        const path = `${negocio.codigo}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabaseClient.storage.from('logos').upload(path, file, { upsert:true });
+        if(upErr){ showToast('No se pudo subir el logotipo: ' + upErr.message, 'error'); return; }
+        const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
+        logo_url = urlData.publicUrl;
+      }
+      const { error } = await supabaseClient.from('negocios').update({ direccion, logo_url }).eq('id', negocio.id);
+      if(error){ showToast('No se pudo guardar.', 'error'); return; }
+      showToast('Datos actualizados.', 'success');
+      closeModal();
+      loadDashboard();
+    });
+    document.getElementById('toggleTicketAuthBtn').addEventListener('click', async ()=>{
+      const nuevoValor = !negocio.mostrar_datos_ticket;
+      const { error } = await supabaseClient.from('negocios').update({ mostrar_datos_ticket: nuevoValor }).eq('id', negocio.id);
+      if(error){ showToast('No se pudo actualizar.', 'error'); return; }
+      showToast(nuevoValor ? 'Autorizado: su ticket ya puede mostrar logo, dirección y teléfono.' : 'Autorización retirada.', 'success');
+      closeModal();
+      loadDashboard();
+    });
+    const suspendBtn = document.getElementById('suspendBtn');
+    if(suspendBtn) suspendBtn.addEventListener('click', ()=> toggleEstatus(negocio, 'suspendido'));
+    const reactivateBtn = document.getElementById('reactivateBtn');
+    if(reactivateBtn) reactivateBtn.addEventListener('click', ()=> toggleEstatus(negocio, 'activo'));
+
+    const from = document.getElementById('reportFrom');
+    const to = document.getElementById('reportTo');
+    to.value = todayStr();
+    from.value = addMonths(todayStr(), -1);
+    document.getElementById('genReportBtn').addEventListener('click', ()=> generarReporte(negocioId, from.value, to.value));
+  }
+
+  async function toggleEstatus(negocio, nuevoEstatus){
+    const { error } = await supabaseClient.from('negocios').update({ estatus: nuevoEstatus }).eq('id', negocio.id);
+    if(error){ showToast('No se pudo actualizar el estatus.', 'error'); return; }
+    showToast(nuevoEstatus==='suspendido' ? 'Servicio suspendido.' : 'Servicio reactivado.', 'success');
+    closeModal();
+    loadDashboard();
+  }
+
+  function openPaymentModal(negocio){
+    openModal('Registrar pago', `
+      <form id="paymentForm" class="form-grid">
+        <label>Monto*<input required name="monto" type="number" min="0" step="0.01" value="${negocio.precio_mensual}" /></label>
+        <label>Método<select name="metodo"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="terminal">Terminal bancaria</option></select></label>
+        <label>Fecha de pago<input name="fecha" type="date" value="${todayStr()}" /></label>
+        <label>Deja cubierto el servicio hasta*<input required name="cubre_hasta" type="date" value="${addMonths(negocio.fecha_proximo_pago || todayStr(), 1)}" /></label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" id="cancelPayment">Cancelar</button>
+      <button type="button" class="btn-primary" id="savePayment">Guardar pago</button>
+    `);
+    document.getElementById('cancelPayment').addEventListener('click', closeModal);
+    document.getElementById('savePayment').addEventListener('click', async ()=>{
+      const form = document.getElementById('paymentForm');
+      const monto = Number(form.monto.value);
+      const cubre_hasta = form.cubre_hasta.value;
+      if(!(monto>0) || !cubre_hasta){ showToast('Revisa el monto y la fecha.', 'warn'); return; }
+      const { error: err1 } = await supabaseClient.from('pagos').insert({
+        negocio_id: negocio.id, monto, metodo: form.metodo.value, fecha: form.fecha.value, cubre_hasta
+      });
+      if(err1){ showToast('No se pudo guardar el pago.', 'error'); return; }
+      const { error: err2 } = await supabaseClient.from('negocios').update({ fecha_proximo_pago: cubre_hasta, estatus:'activo' }).eq('id', negocio.id);
+      if(err2){ showToast('El pago se guardó, pero no se pudo actualizar la fecha del negocio.', 'warn'); }
+      closeModal();
+      showToast('Pago registrado.', 'success');
+      loadDashboard();
+    });
+  }
+
+  async function generarReporte(negocioId, desde, hasta){
+    const output = document.getElementById('reportOutput');
+    output.innerHTML = '<p>Calculando…</p>';
+    const desdeISO = desde + 'T00:00:00';
+    const hastaISO = hasta + 'T23:59:59';
+    const [{ data: ventas, error: e1 }, { data: movs, error: e2 }, { data: snap, error: e3 }] = await Promise.all([
+      supabaseClient.from('ventas').select('*').eq('negocio_id', negocioId).gte('fecha_hora', desdeISO).lte('fecha_hora', hastaISO),
+      supabaseClient.from('movimientos_inventario').select('*').eq('negocio_id', negocioId).gte('fecha_hora', desdeISO).lte('fecha_hora', hastaISO),
+      supabaseClient.from('inventario_snapshot').select('*').eq('negocio_id', negocioId).maybeSingle()
+    ]);
+    if(e1 || e2){ output.innerHTML = '<p class="error-text">No se pudo generar el reporte.</p>'; return; }
+    const ventasList = ventas || [];
+    const ingreso = ventasList.reduce((s,v)=> s+Number(v.total), 0);
+    const costoVendido = ventasList.reduce((s,v)=> s + (v.items||[]).reduce((s2,it)=> s2 + (Number(it.cost)||0)*Number(it.qty), 0), 0);
+    const ganancia = ingreso - costoVendido;
+    const inversion = (movs||[]).reduce((s,m)=> s + Number(m.cantidad)*(Number(m.costo_unitario)||0), 0);
+    const productos = (snap && snap.productos) || [];
+    const valorInventario = productos.reduce((s,p)=> s + (Number(p.cost)||0)*(Number(p.stock)||0), 0);
+    const inventarioFilas = productos.map(p=>`<tr><td>${escapeHTML(p.name)}</td><td class="num">${formatMoney(p.cost||0)}</td><td class="num">${p.stock}</td><td class="num">${formatMoney((p.cost||0)*p.stock)}</td></tr>`).join('');
+
+    output.innerHTML = `
+      <div class="report-grid">
+        <div class="report-card"><span class="summary-label">Ventas (${ventasList.length})</span><div class="v">${formatMoney(ingreso)}</div></div>
+        <div class="report-card"><span class="summary-label">Ganancia bruta</span><div class="v">${formatMoney(ganancia)}</div></div>
+        <div class="report-card"><span class="summary-label">Invertido en mercancía</span><div class="v">${formatMoney(inversion)}</div></div>
+        <div class="report-card"><span class="summary-label">Costo de lo vendido</span><div class="v">${formatMoney(costoVendido)}</div></div>
+        <div class="report-card"><span class="summary-label">Valor del inventario actual</span><div class="v">${formatMoney(valorInventario)}</div></div>
+      </div>
+      <h4 style="margin-top:16px; font-family:'Space Grotesk',sans-serif; font-size:.9rem;">Inventario teórico actual (para contar físicamente)</h4>
+      <div class="table-scroll" style="margin-top:8px;">
+        <table class="data-table">
+          <thead><tr><th>Producto</th><th class="num">Costo unit.</th><th class="num">Debería tener</th><th class="num">Valor</th></tr></thead>
+          <tbody>${inventarioFilas || '<tr><td colspan="4"><div class="empty-state">Sin datos de inventario todavía.</div></td></tr>'}</tbody>
+        </table>
+      </div>
+      <p style="font-size:.78rem; color:var(--ink-soft); margin-top:10px;">El inventario es la foto más reciente que mandó el punto de venta, no de la fecha exacta "hasta"; las ventas y la inversión sí corresponden al rango elegido.</p>
+    `;
+  }
+
+  // ------------------------------------------------------------- Arranque
+  (async function boot(){
+    if(!cloudEnabled || !supabaseClient){ renderNotConfigured(); return; }
+    const { data } = await supabaseClient.auth.getSession();
+    if(data && data.session){ session = data.session; loadDashboard(); }
+    else{ renderLogin(); }
+  })();
+</script>
+</body>
+</html>
