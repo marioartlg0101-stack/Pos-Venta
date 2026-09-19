@@ -306,6 +306,7 @@
         <label>Teléfono<input name="telefono" type="tel" /></label>
         <label>Dirección<input name="direccion" type="text" /></label>
         <label>Logotipo (opcional)<input name="logo" type="file" accept="image/*" /></label>
+        <label>Color de marca<input name="color_primario" type="color" value="#16A34A" style="height:42px; padding:4px;" /></label>
         <label>Precio mensual*<input required name="precio_mensual" type="number" min="0" step="0.01" value="299" /></label>
         <label>Código para su punto de venta*<input required name="codigo" type="text" placeholder="Ej. FARM-01" /></label>
       </form>
@@ -334,7 +335,7 @@
         nombre_negocio, giro: form.giro.value.trim(), nombre_contacto: form.nombre_contacto.value.trim(),
         telefono: form.telefono.value.trim(), direccion: form.direccion.value.trim(),
         precio_mensual: Number(form.precio_mensual.value)||299,
-        codigo, estatus:'activo', logo_url
+        codigo, estatus:'activo', logo_url, color_primario: form.color_primario.value
       });
       if(error){ showToast(error.message.includes('duplicate') ? 'Ese código ya está en uso.' : 'No se pudo guardar.', 'error'); return; }
       closeModal();
@@ -368,7 +369,8 @@
           <label>Dirección<input id="editDireccion" type="text" value="${escapeHTML(negocio.direccion||'')}" /></label>
           <label>Logotipo${negocio.logo_url ? ' (subir uno reemplaza el actual)' : ''}<input id="editLogoFile" type="file" accept="image/*" /></label>
           ${negocio.logo_url ? `<img src="${negocio.logo_url}" alt="Logo actual" style="max-height:48px; max-width:120px; object-fit:contain;" />` : `<p style="font-size:.82rem; color:var(--ink-soft);">Sin logotipo todavía.</p>`}
-          <button type="button" class="btn-secondary btn-sm" id="saveTicketInfoBtn" style="align-self:flex-start;">Guardar dirección / logo</button>
+          <label>Color de marca<input id="editColorPrimario" type="color" value="${negocio.color_primario || '#16A34A'}" style="height:42px; padding:4px;" /></label>
+          <button type="button" class="btn-secondary btn-sm" id="saveTicketInfoBtn" style="align-self:flex-start;">Guardar cambios</button>
         </div>
         <div style="margin-top:16px;">
           <span class="summary-label">Datos completos en el ticket</span>
@@ -408,6 +410,7 @@
     document.getElementById('registerPaymentBtn').addEventListener('click', ()=> openPaymentModal(negocio));
     document.getElementById('saveTicketInfoBtn').addEventListener('click', async ()=>{
       const direccion = document.getElementById('editDireccion').value.trim();
+      const color_primario = document.getElementById('editColorPrimario').value;
       const file = document.getElementById('editLogoFile').files[0];
       let logo_url = negocio.logo_url;
       if(file){
@@ -418,7 +421,7 @@
         const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
         logo_url = urlData.publicUrl;
       }
-      const { error } = await supabaseClient.from('negocios').update({ direccion, logo_url }).eq('id', negocio.id);
+      const { error } = await supabaseClient.from('negocios').update({ direccion, logo_url, color_primario }).eq('id', negocio.id);
       if(error){ showToast('No se pudo guardar.', 'error'); return; }
       showToast('Datos actualizados.', 'success');
       closeModal();
