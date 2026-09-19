@@ -144,7 +144,11 @@
   function formatMoney(n){
     return '$' + (Number(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
-  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function todayStr(){
+    const d = new Date();
+    const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return `${y}-${mo}-${da}`;
+  }
   function addMonths(dateStr, n){
     const d = new Date(dateStr + 'T00:00:00');
     d.setMonth(d.getMonth()+n);
@@ -308,6 +312,7 @@
         <label>Logotipo (opcional)<input name="logo" type="file" accept="image/*" /></label>
         <label>Color de marca<input name="color_primario" type="color" value="#16A34A" style="height:42px; padding:4px;" /></label>
         <label>Precio mensual*<input required name="precio_mensual" type="number" min="0" step="0.01" value="299" /></label>
+        <label>Fecha de alta<input name="fecha_alta" type="date" value="${todayStr()}" /></label>
         <label>Código para su punto de venta*<input required name="codigo" type="text" placeholder="Ej. FARM-01" /></label>
       </form>
     `, `
@@ -331,11 +336,13 @@
         const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
         logo_url = urlData.publicUrl;
       }
+      const fecha_alta = form.fecha_alta.value || todayStr();
       const { error } = await supabaseClient.from('negocios').insert({
         nombre_negocio, giro: form.giro.value.trim(), nombre_contacto: form.nombre_contacto.value.trim(),
         telefono: form.telefono.value.trim(), direccion: form.direccion.value.trim(),
         precio_mensual: Number(form.precio_mensual.value)||299,
-        codigo, estatus:'activo', logo_url, color_primario: form.color_primario.value
+        codigo, estatus:'activo', logo_url, color_primario: form.color_primario.value,
+        fecha_alta, fecha_proximo_pago: addMonths(fecha_alta, 1)
       });
       if(error){ showToast(error.message.includes('duplicate') ? 'Ese código ya está en uso.' : 'No se pudo guardar.', 'error'); return; }
       closeModal();
@@ -357,6 +364,7 @@
           <div><span>Giro</span>${escapeHTML(negocio.giro||'—')}</div>
           <div><span>Código</span>${escapeHTML(negocio.codigo)}</div>
           <div><span>Contacto</span>${escapeHTML(negocio.nombre_contacto||'—')} · ${escapeHTML(negocio.telefono||'—')}</div>
+          <div><span>Fecha de alta</span>${negocio.fecha_alta || '—'}</div>
           <div><span>Precio mensual</span>${formatMoney(negocio.precio_mensual)}</div>
           <div><span>Estatus</span><span class="status-pill status-${negocio.estatus}">${negocio.estatus==='activo'?'Activo':'Suspendido'}</span></div>
           <div><span>Próximo pago</span>${negocio.fecha_proximo_pago || 'Sin pagos'}${dias!==null && negocio.estatus==='activo' ? (dias<0 ? ` (vencido hace ${Math.abs(dias)}d)` : ` (${dias}d)`) : ''}</div>
