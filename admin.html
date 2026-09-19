@@ -65,6 +65,11 @@
   .summary-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:16px 18px; }
   .summary-card.warn{ border-color:var(--amber); background:var(--amber-bg); }
   .summary-card.danger{ border-color:var(--red); background:var(--red-bg); }
+  .summary-clickable{ cursor:pointer; text-align:left; font-family:inherit; width:100%; display:flex; flex-direction:column; gap:2px; transition:box-shadow .12s, transform .08s; }
+  .summary-clickable:hover{ box-shadow:0 4px 14px -6px rgba(21,42,30,.25); }
+  .summary-clickable:active{ transform:scale(.99); }
+  .summary-clickable.active-filter{ outline:2px solid var(--green-600); outline-offset:2px; }
+  .filtro-activo-aviso{ font-size:.85rem; color:var(--ink-soft); margin:0 0 12px; }
   .summary-label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
   .summary-value{ font-family:'Space Grotesk',sans-serif; font-size:1.6rem; font-weight:700; }
 
@@ -137,6 +142,7 @@
   let session = null;
   let negocios = [];
   let activeNegocioId = null;
+  let filtroClientes = 'todos';
 
   function escapeHTML(str){
     return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -217,24 +223,25 @@
       </header>
       <main class="content">
         <div class="summary-row">
-          <div class="summary-card">
+          <button type="button" class="summary-card summary-clickable ${filtroClientes==='activos'?'active-filter':''}" data-filter="activos">
             <span class="summary-label">Clientes activos</span>
             <span class="summary-value">${negocios.filter(n=>n.estatus==='activo').length}</span>
-          </div>
-          <div class="summary-card ${porVencer.length?'warn':''}">
+          </button>
+          <button type="button" class="summary-card summary-clickable ${porVencer.length?'warn':''} ${filtroClientes==='por_vencer'?'active-filter':''}" data-filter="por_vencer">
             <span class="summary-label">Por vencer (3 días o menos)</span>
             <span class="summary-value">${porVencer.length}</span>
-          </div>
-          <div class="summary-card ${vencidos.length?'danger':''}">
+          </button>
+          <button type="button" class="summary-card summary-clickable ${vencidos.length?'danger':''} ${filtroClientes==='vencidos'?'active-filter':''}" data-filter="vencidos">
             <span class="summary-label">Vencidos</span>
             <span class="summary-value">${vencidos.length}</span>
-          </div>
+          </button>
         </div>
 
         <div class="panel-header">
           <h2>Clientes</h2>
           <button type="button" class="btn-primary" id="newClientBtn">Nuevo cliente</button>
         </div>
+        ${filtroClientes!=='todos' ? `<p class="filtro-activo-aviso">Mostrando: <strong>${filtroClientes==='activos'?'clientes activos':filtroClientes==='por_vencer'?'por vencer':'vencidos'}</strong> · <button type="button" class="link-btn" id="verTodosBtn">Ver todos</button></p>` : ''}
         <div class="table-scroll">
           <table class="data-table">
             <thead><tr><th>Negocio</th><th>Giro</th><th>Código</th><th>Estatus</th><th>Próximo pago</th><th>Acciones</th></tr></thead>
@@ -249,17 +256,33 @@
       renderLogin();
     });
     document.getElementById('newClientBtn').addEventListener('click', openNewClientModal);
+    document.querySelectorAll('[data-filter]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const f = btn.dataset.filter;
+        filtroClientes = (filtroClientes===f) ? 'todos' : f;
+        renderApp();
+      });
+    });
+    const verTodosBtn = document.getElementById('verTodosBtn');
+    if(verTodosBtn) verTodosBtn.addEventListener('click', ()=>{ filtroClientes='todos'; renderApp(); });
     renderClientsTable();
   }
 
   function renderClientsTable(){
     const tbody = document.getElementById('clientsTableBody');
     if(!tbody) return;
-    if(negocios.length===0){
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">Aún no tienes clientes registrados.</div></td></tr>`;
+    const listado = negocios.filter(n=>{
+      const dias = diasRestantes(n.fecha_proximo_pago);
+      if(filtroClientes==='activos') return n.estatus==='activo';
+      if(filtroClientes==='por_vencer') return n.estatus==='activo' && dias!==null && dias<=3 && dias>=0;
+      if(filtroClientes==='vencidos') return n.estatus==='activo' && dias!==null && dias<0;
+      return true;
+    });
+    if(listado.length===0){
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">${negocios.length===0 ? 'Aún no tienes clientes registrados.' : 'Ningún cliente coincide con este filtro.'}</div></td></tr>`;
       return;
     }
-    tbody.innerHTML = negocios.map(n=>{
+    tbody.innerHTML = listado.map(n=>{
       const dias = diasRestantes(n.fecha_proximo_pago);
       let vencInfo = n.fecha_proximo_pago ? n.fecha_proximo_pago : 'Sin pagos';
       let vencClass = '';
