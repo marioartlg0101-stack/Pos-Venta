@@ -549,7 +549,12 @@
         .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
         .ilike('codigo', codigo)
         .maybeSingle();
-      if(error || !data){
+      if(error){
+        errorEl.textContent = 'Error al buscar: ' + (error.message || error.code || JSON.stringify(error));
+        errorEl.style.display = 'block';
+        return;
+      }
+      if(!data){
         errorEl.textContent = 'No se encontró ese código. Revísalo con tu proveedor.';
         errorEl.style.display = 'block';
         return;
