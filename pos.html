@@ -193,6 +193,12 @@
   .method-btn.active{ border-color:var(--green-600); background:var(--surface-alt); color:var(--green-700); }
 
   .cash-row{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; padding:12px; background:var(--surface-alt); border-radius:var(--radius-sm); }
+  .factura-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .factura-row-label{ font-size:.88rem; font-weight:600; color:var(--ink); }
+  .factura-toggle{ display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; }
+  .factura-toggle-btn{ padding:6px 16px; border:none; background:var(--surface); color:var(--ink-soft); font-size:.85rem; font-weight:600; cursor:pointer; }
+  .factura-toggle-btn.active{ background:var(--green-600); color:#fff; }
+  .factura-btn{ width:100%; margin-bottom:14px; }
   .cash-row label{ font-size:.78rem; color:var(--ink-soft); font-weight:600; }
   .cash-row input{ padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:1rem; font-variant-numeric:tabular-nums; background:var(--surface); color:var(--ink); }
   .change-line{ display:flex; justify-content:space-between; font-size:.9rem; margin-top:2px; }
@@ -392,7 +398,7 @@
     return {
       businessName:'Mi Negocio', products:[], sales:[], nextFolio:1,
       negocioId:null, negocioCodigo:null, estatusCache:'activo',
-      negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false, colorPrimario:'',
+      negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false, colorPrimario:'', facturacionHabilitada:false,
       pendingVentas:[], pendingMovimientos:[], snapshotDirty:false
     };
   }
@@ -421,6 +427,8 @@
   let activeCategory = 'Todas';
   let venderSearch = '';
   let selectedMethod = null;
+  let quiereFactura = false;
+  let datosFiscalesDraft = { rfc:'', razon_social:'', codigo_postal:'', regimen_fiscal:'', uso_cfdi:'', correo:'' };
   let receivedDraft = '';
   let ventasDate = todayStr();
 
@@ -484,7 +492,7 @@
     try{
       const { data, error } = await supabaseClient
         .from('negocios_estatus_publico')
-        .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario')
+        .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
         .eq('codigo', codigo)
         .maybeSingle();
       if(error || !data){
@@ -500,6 +508,7 @@
       state.negocioLogoUrl = data.logo_url || '';
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       state.colorPrimario = data.color_primario || '';
+      state.facturacionHabilitada = !!data.facturacion_habilitada;
       if(data.nombre_negocio){ state.businessName = data.nombre_negocio; }
       saveState();
 
@@ -529,7 +538,8 @@
               id: v.id, folio: v.folio, dateISO: v.fecha_hora,
               items: v.items, total: Number(v.total), method: v.metodo,
               received: v.recibido!==null ? Number(v.recibido) : null,
-              change: v.cambio!==null ? Number(v.cambio) : null
+              change: v.cambio!==null ? Number(v.cambio) : null,
+              requiereFactura: !!v.requiere_factura, datosFiscales: v.datos_fiscales || null
             }));
             let maxFolio = 0;
             state.sales.forEach(s=>{
@@ -576,7 +586,7 @@
     try{
       const { data, error } = await supabaseClient
         .from('negocios_estatus_publico')
-        .select('estatus, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario')
+        .select('estatus, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
         .eq('id', state.negocioId)
         .maybeSingle();
       if(error) return; // error real de conexión/permiso: no bloquear, se reintenta después
@@ -594,10 +604,12 @@
       state.negocioLogoUrl = data.logo_url || '';
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       state.colorPrimario = data.color_primario || '';
+      state.facturacionHabilitada = !!data.facturacion_habilitada;
       saveState();
       applyBrandLogo();
       aplicarColorMarca(state.colorPrimario);
       renderCatalogCover();
+      renderCartSummary();
       if(data.estatus === 'suspendido'){
         renderSuspendedScreen();
       }else if(wasSuspended){
@@ -645,7 +657,8 @@
         const v = state.pendingVentas[0];
         const { error } = await supabaseClient.from('ventas').insert({
           negocio_id: state.negocioId, folio: v.folio, fecha_hora: v.dateISO,
-          items: v.items, total: v.total, metodo: v.method, recibido: v.received, cambio: v.change
+          items: v.items, total: v.total, metodo: v.method, recibido: v.received, cambio: v.change,
+          requiere_factura: !!v.requiereFactura, datos_fiscales: v.datosFiscales || null
         });
         if(error) break;
         state.pendingVentas.shift();
@@ -837,6 +850,8 @@
     cart = [];
     selectedMethod = null;
     receivedDraft = '';
+    quiereFactura = false;
+    datosFiscalesDraft = { rfc:'', razon_social:'', codigo_postal:'', regimen_fiscal:'', uso_cfdi:'', correo:'' };
     renderCart();
   }
   function setMethod(method){
@@ -856,6 +871,7 @@
       if(received < total){ showToast('El monto recibido es menor al total.', 'warn'); return; }
       change = received - total;
     }
+    if(facturaEstaIncompleta()){ showToast('Completa los datos fiscales o desmarca "¿Requiere factura?".', 'warn'); return; }
     for(const item of cart){
       const p = state.products.find(x=>x.id===item.productId);
       if(!p || p.stock < item.qty){ showToast(`Existencia insuficiente de ${item.name}.`, 'error'); return; }
@@ -865,10 +881,13 @@
       p.stock -= item.qty;
     });
     const folio = 'V-' + String(state.nextFolio).padStart(4,'0');
+    const facturaSolicitada = state.facturacionHabilitada && quiereFactura;
     state.sales.push({
       id: uid('s_'), folio, dateISO: new Date().toISOString(),
       items: cart.map(c=>({productId:c.productId, name:c.name, qty:c.qty, price:c.price, cost:c.cost||0})),
-      total, method:selectedMethod, received, change
+      total, method:selectedMethod, received, change,
+      requiereFactura: facturaSolicitada,
+      datosFiscales: facturaSolicitada ? {...datosFiscalesDraft} : null
     });
     state.nextFolio++;
     saveState();
@@ -983,12 +1002,28 @@
         <div class="change-line"><span>Cambio</span><strong id="cambioValue">${formatMoney(Math.max(change,0))}</strong></div>
       </div>`;
     }
-    const disabled = cart.length===0 || !selectedMethod || (selectedMethod==='efectivo' && Number(receivedDraft||0) < total);
+    if(state.facturacionHabilitada){
+      const datosCompletos = !facturaEstaIncompleta() && quiereFactura;
+      html += `<div class="factura-row">
+        <span class="factura-row-label">¿Requiere factura?</span>
+        <div class="factura-toggle">
+          <button type="button" class="factura-toggle-btn ${!quiereFactura?'active':''}" data-action="set-quiere-factura" data-value="no">No</button>
+          <button type="button" class="factura-toggle-btn ${quiereFactura?'active':''}" data-action="set-quiere-factura" data-value="si">Sí</button>
+        </div>
+      </div>`;
+      if(quiereFactura){
+        html += `<button type="button" class="btn-secondary factura-btn" data-action="open-datos-fiscales">${datosCompletos ? '✓ Datos fiscales capturados · Editar' : 'Facturar'}</button>`;
+      }
+    }
+    const disabled = cart.length===0 || !selectedMethod || (selectedMethod==='efectivo' && Number(receivedDraft||0) < total) || facturaEstaIncompleta();
     html += `<button type="button" class="btn-primary btn-cobrar" data-action="checkout" ${disabled?'disabled':''}>Cobrar${cart.length?' '+formatMoney(total):''}</button>`;
     area.innerHTML = html;
   }
   function renderCart(){ renderCartItems(); renderCartSummary(); }
 
+  function facturaEstaIncompleta(){
+    return state.facturacionHabilitada && quiereFactura && (!datosFiscalesDraft.rfc || !datosFiscalesDraft.razon_social || !datosFiscalesDraft.codigo_postal || !datosFiscalesDraft.regimen_fiscal || !datosFiscalesDraft.uso_cfdi);
+  }
   function updateChangeDisplay(){
     const input = document.getElementById('recibidoInput');
     if(!input) return;
@@ -998,7 +1033,7 @@
     const cambioEl = document.getElementById('cambioValue');
     if(cambioEl) cambioEl.textContent = formatMoney(Math.max(change,0));
     const btn = document.querySelector('.btn-cobrar');
-    if(btn) btn.disabled = cart.length===0 || !selectedMethod || Number(receivedDraft||0) < total;
+    if(btn) btn.disabled = cart.length===0 || !selectedMethod || Number(receivedDraft||0) < total || facturaEstaIncompleta();
   }
 
   // ---------- Rendering: Inventario ----------
@@ -1075,6 +1110,7 @@
         <p class="ticket-total">Total: ${formatMoney(sale.total)}</p>
         <p>Método: ${methodLabel(sale.method)}</p>
         ${sale.method==='efectivo' ? `<p>Recibido: ${formatMoney(sale.received)} · Cambio: ${formatMoney(sale.change)}</p>` : ''}
+        ${sale.requiereFactura ? `<p><strong>Factura solicitada</strong>${sale.datosFiscales && sale.datosFiscales.rfc ? ' · RFC: '+escapeHTML(sale.datosFiscales.rfc) : ''}</p>` : ''}
         <p class="ticket-footer">¡Gracias por su compra!</p>
       </div>
     `;
@@ -1124,6 +1160,55 @@
     closeModal();
     renderInventory(); renderVenderGrid();
     showToast(`${name} agregado al inventario.`, 'success');
+  }
+
+  function openDatosFiscalesModal(){
+    openModal('Datos fiscales', `
+      <form id="datosFiscalesForm" class="form-grid">
+        <label>RFC*<input required name="rfc" type="text" maxlength="13" value="${escapeHTML(datosFiscalesDraft.rfc)}" /></label>
+        <label>Razón social*<input required name="razon_social" type="text" value="${escapeHTML(datosFiscalesDraft.razon_social)}" /></label>
+        <label>Código postal fiscal*<input required name="codigo_postal" type="text" maxlength="5" value="${escapeHTML(datosFiscalesDraft.codigo_postal)}" /></label>
+        <label>Régimen fiscal*
+          <select required name="regimen_fiscal">
+            <option value="">Elige uno…</option>
+            <option value="612" ${datosFiscalesDraft.regimen_fiscal==='612'?'selected':''}>612 - Personas Físicas con Act. Empresariales</option>
+            <option value="621" ${datosFiscalesDraft.regimen_fiscal==='621'?'selected':''}>621 - Incorporación Fiscal</option>
+            <option value="616" ${datosFiscalesDraft.regimen_fiscal==='616'?'selected':''}>616 - Sin obligaciones fiscales</option>
+            <option value="601" ${datosFiscalesDraft.regimen_fiscal==='601'?'selected':''}>601 - General de Ley Personas Morales</option>
+            <option value="605" ${datosFiscalesDraft.regimen_fiscal==='605'?'selected':''}>605 - Sueldos y Salarios</option>
+          </select>
+        </label>
+        <label>Uso de CFDI*
+          <select required name="uso_cfdi">
+            <option value="">Elige uno…</option>
+            <option value="G03" ${datosFiscalesDraft.uso_cfdi==='G03'?'selected':''}>G03 - Gastos en general</option>
+            <option value="G01" ${datosFiscalesDraft.uso_cfdi==='G01'?'selected':''}>G01 - Adquisición de mercancías</option>
+            <option value="P01" ${datosFiscalesDraft.uso_cfdi==='P01'?'selected':''}>P01 - Por definir</option>
+          </select>
+        </label>
+        <label>Correo (opcional)<input name="correo" type="email" value="${escapeHTML(datosFiscalesDraft.correo)}" /></label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="save-datos-fiscales">Guardar</button>
+    `);
+  }
+  function handleSaveDatosFiscales(){
+    const form = document.getElementById('datosFiscalesForm');
+    const rfc = form.rfc.value.trim().toUpperCase();
+    const razon_social = form.razon_social.value.trim();
+    const codigo_postal = form.codigo_postal.value.trim();
+    const regimen_fiscal = form.regimen_fiscal.value;
+    const uso_cfdi = form.uso_cfdi.value;
+    const correo = form.correo.value.trim();
+    if(!rfc || !razon_social || !codigo_postal || !regimen_fiscal || !uso_cfdi){
+      showToast('Completa todos los campos obligatorios.', 'warn');
+      return;
+    }
+    datosFiscalesDraft = { rfc, razon_social, codigo_postal, regimen_fiscal, uso_cfdi, correo };
+    closeModal();
+    renderCartSummary();
+    showToast('Datos fiscales guardados.', 'success');
   }
 
   function openReceiveStockModal(){
@@ -1324,6 +1409,12 @@
       case 'cart-remove': removeFromCart(id); break;
       case 'clear-cart': clearCart(); break;
       case 'set-method': setMethod(btn.dataset.method); break;
+      case 'set-quiere-factura':
+        quiereFactura = btn.dataset.value === 'si';
+        renderCartSummary();
+        break;
+      case 'open-datos-fiscales': openDatosFiscalesModal(); break;
+      case 'save-datos-fiscales': handleSaveDatosFiscales(); break;
       case 'checkout': completeSale(); break;
       case 'open-add-product': openAddProductModal(); break;
       case 'open-receive-stock': openReceiveStockModal(); break;
