@@ -547,7 +547,7 @@
       const { data, error } = await supabaseClient
         .from('negocios_estatus_publico')
         .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
-        .eq('codigo', codigo)
+        .ilike('codigo', codigo)
         .maybeSingle();
       if(error || !data){
         errorEl.textContent = 'No se encontró ese código. Revísalo con tu proveedor.';
@@ -1677,7 +1677,7 @@
     const form = document.getElementById('abrirTurnoForm');
     const codigo = form.codigo.value.trim();
     const fondoInicial = Number(form.fondo_inicial.value)||0;
-    const cajero = state.cajeros.find(c=> c.codigo === codigo);
+    const cajero = state.cajeros.find(c=> c.codigo.trim().toLowerCase() === codigo.toLowerCase());
     if(!cajero){ showToast('Código de cajero no reconocido.', 'error'); return; }
     try{
       const { data, error } = await supabaseClient.from('turnos').insert({
@@ -1712,7 +1712,7 @@
   async function handleCerrarTurno(){
     const form = document.getElementById('cerrarTurnoForm');
     const codigo = form.codigo.value.trim();
-    const cajero = state.cajeros.find(c=> c.codigo === codigo);
+    const cajero = state.cajeros.find(c=> c.codigo.trim().toLowerCase() === codigo.toLowerCase());
     if(!cajero){ showToast('Código de cajero no reconocido.', 'error'); return; }
     const efectivoContado = Number(form.efectivo_contado.value)||0;
     const transferenciaContado = Number(form.transferencia_contado.value)||0;
