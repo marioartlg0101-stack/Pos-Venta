@@ -81,6 +81,8 @@
   let scannerLoopId = null;
   let scannerDetector = null;
   let scannerLastCode = '';
+  let framesSinDeteccion = 0;
+  const FRAMES_PARA_LIBERAR = 10;
   let audioCtx = null;
   function reproducirBeep(){
     try{
@@ -232,6 +234,7 @@
     try{
       const codigos = await scannerDetector.detect(video);
       if(codigos && codigos.length){
+        framesSinDeteccion = 0;
         const valor = codigos[0].rawValue;
         if(valor && valor !== scannerLastCode){
           scannerLastCode = valor;
@@ -239,7 +242,10 @@
           enviarEscaneo(valor);
         }
       }else{
-        scannerLastCode = ''; // ya no se ve ningún código: el siguiente que aparezca cuenta como nuevo
+        framesSinDeteccion++;
+        if(framesSinDeteccion >= FRAMES_PARA_LIBERAR){
+          scannerLastCode = ''; // llevas varios cuadros seguidos sin ver ningún código: el siguiente cuenta como nuevo
+        }
       }
     }catch(e){ /* frame no listo: seguir intentando */ }
     if(scannerStream){ scannerLoopId = requestAnimationFrame(scannerLoop); }
