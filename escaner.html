@@ -56,7 +56,14 @@
   .scan-exit{ background:rgba(255,255,255,.15); border:none; color:#fff; padding:8px 14px; border-radius:999px; font-size:.82rem; font-weight:600; cursor:pointer; }
   .scan-video{ flex:1; width:100%; object-fit:cover; background:#000; }
   .scan-frame{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:82%; max-width:380px; height:130px; border:3px solid var(--green-500); border-radius:14px; box-shadow:0 0 0 2000px rgba(0,0,0,.4); pointer-events:none; }
-  .scan-hint{ position:absolute; bottom:130px; left:0; right:0; text-align:center; color:#fff; font-size:.92rem; }
+  .scan-hint{ position:absolute; bottom:290px; left:0; right:0; text-align:center; color:#fff; font-size:.92rem; }
+  .trigger-btn{
+    position:absolute; bottom:150px; left:50%; transform:translateX(-50%);
+    width:120px; height:120px; border-radius:999px; border:4px solid #fff;
+    background:rgba(255,255,255,.15); color:#fff; font-size:.8rem; font-weight:700;
+    padding:12px; cursor:pointer; touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  .trigger-btn.activo{ background:var(--green-600); border-color:var(--green-500); }
   .scan-feed{ position:absolute; bottom:20px; left:16px; right:16px; display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow-y:auto; }
   .scan-feed-item{ background:rgba(255,255,255,.94); color:var(--ink); padding:9px 13px; border-radius:8px; font-size:.86rem; font-weight:600; display:flex; justify-content:space-between; gap:8px; }
   .scan-feed-item.enviado{ color:var(--green-700); }
@@ -81,6 +88,7 @@
   let scannerLoopId = null;
   let scannerDetector = null;
   let escaneandoPausado = false;
+  let disparadorActivo = false;
   const PAUSA_DESPUES_DE_ESCANEAR = 1200; // ms de "descanso" tras cada lectura exitosa
   let audioCtx = null;
   function reproducirBeep(){
@@ -183,6 +191,7 @@
   function iniciarEscaneo(){
     feedItems = [];
     escaneandoPausado = false;
+    disparadorActivo = false;
     document.getElementById('app').innerHTML = `
       <div class="scan-screen">
         <div class="scan-topbar">
@@ -191,10 +200,18 @@
         </div>
         <video id="scanVideo" class="scan-video" autoplay playsinline muted></video>
         <div class="scan-frame"></div>
-        <p class="scan-hint">Apunta la cámara al código de barras</p>
+        <p class="scan-hint">Apunta la cámara, luego mantén presionado el botón</p>
+        <button type="button" id="triggerBtn" class="trigger-btn">Mantén presionado para leer</button>
         <div id="scanFeed" class="scan-feed"></div>
       </div>`;
     document.getElementById('salirBtn').addEventListener('click', salir);
+    const triggerBtn = document.getElementById('triggerBtn');
+    const activarDisparador = (e)=>{ e.preventDefault(); disparadorActivo = true; triggerBtn.classList.add('activo'); scannerLoop(); };
+    const desactivarDisparador = ()=>{ disparadorActivo = false; triggerBtn.classList.remove('activo'); };
+    triggerBtn.addEventListener('pointerdown', activarDisparador);
+    triggerBtn.addEventListener('pointerup', desactivarDisparador);
+    triggerBtn.addEventListener('pointercancel', desactivarDisparador);
+    triggerBtn.addEventListener('pointerleave', desactivarDisparador);
     try{
       if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -218,7 +235,6 @@
         if(!video){ stream.getTracks().forEach(t=>t.stop()); return; }
         video.srcObject = stream;
         scannerDetector = new window.BarcodeDetector({ formats: BARCODE_FORMATS });
-        scannerLoop();
       })
       .catch((err)=>{
         const detalle = err ? ((err.name||'Error') + (err.message ? ': '+err.message : '')) : 'Error desconocido';
@@ -236,6 +252,7 @@
   }
 
   async function scannerLoop(){
+    if(!disparadorActivo) return;
     const video = document.getElementById('scanVideo');
     if(!video || !scannerDetector) return;
     if(!escaneandoPausado){
@@ -252,7 +269,7 @@
         }
       }catch(e){ /* frame no listo: seguir intentando */ }
     }
-    if(scannerStream){ scannerLoopId = requestAnimationFrame(scannerLoop); }
+    if(scannerStream && disparadorActivo){ scannerLoopId = requestAnimationFrame(scannerLoop); }
   }
 
   async function enviarEscaneo(codigo){
