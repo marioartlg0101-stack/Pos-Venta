@@ -81,7 +81,22 @@
   let scannerLoopId = null;
   let scannerDetector = null;
   let scannerLastCode = '';
-  let scannerLastTime = 0;
+  let audioCtx = null;
+  function reproducirBeep(){
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 1800;
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.12);
+    }catch(e){ /* audio no disponible: se ignora, no afecta el escaneo */ }
+  }
   let feedItems = [];
   let vigilanciaTurnoId = null;
 
@@ -119,6 +134,10 @@
       </div>`;
     document.getElementById('vinculoForm').addEventListener('submit', async (e)=>{
       e.preventDefault();
+      try{
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+      }catch(err){ /* audio no disponible: se ignora */ }
       const codigoNegocio = e.target.negocio.value.trim();
       const codigoCajero = e.target.cajero.value.trim();
       if(!codigoNegocio || !codigoCajero) return;
@@ -210,12 +229,13 @@
       const codigos = await scannerDetector.detect(video);
       if(codigos && codigos.length){
         const valor = codigos[0].rawValue;
-        const ahora = Date.now();
-        if(valor && (valor !== scannerLastCode || (ahora - scannerLastTime) > 1500)){
+        if(valor && valor !== scannerLastCode){
           scannerLastCode = valor;
-          scannerLastTime = ahora;
+          reproducirBeep();
           enviarEscaneo(valor);
         }
+      }else{
+        scannerLastCode = ''; // ya no se ve ningún código: el siguiente que aparezca cuenta como nuevo
       }
     }catch(e){ /* frame no listo: seguir intentando */ }
     if(scannerStream){ scannerLoopId = requestAnimationFrame(scannerLoop); }
