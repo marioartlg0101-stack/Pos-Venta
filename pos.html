@@ -572,6 +572,7 @@
         state.snapshotDirty = false;
         state.turnoActual = null;
         state.cajeros = [];
+        detenerPollEscaneos();
       }
 
       state.negocioId = data.id;
@@ -639,8 +640,10 @@
       }catch(e){ /* sin conexión: se reintentará al abrir la pestaña de Caja */ }
 
       try{
-        const { data: turnoAbierto } = await supabaseClient
-          .from('turnos').select('*').eq('negocio_id', data.id).eq('estado','abierto').maybeSingle();
+        const { data: turnosAbiertos } = await supabaseClient
+          .from('turnos').select('*').eq('negocio_id', data.id).eq('estado','abierto')
+          .order('fecha_apertura', {ascending:false}).limit(1);
+        const turnoAbierto = (turnosAbiertos && turnosAbiertos.length) ? turnosAbiertos[0] : null;
         state.turnoActual = turnoAbierto ? {
           id: turnoAbierto.id, cajeroApertura: turnoAbierto.cajero_apertura,
           fondoInicial: Number(turnoAbierto.fondo_inicial)||0, fechaApertura: turnoAbierto.fecha_apertura
@@ -1551,6 +1554,42 @@
     return { efectivo, transferencia, terminal };
   }
 
+  // ---------- Bandeja de escaneos remotos (desde escaner.html) ----------
+  let pollEscaneosId = null;
+  function iniciarPollEscaneos(){
+    if(pollEscaneosId) return;
+    pollEscaneosId = setInterval(procesarEscaneosPendientes, 2000);
+    procesarEscaneosPendientes();
+  }
+  function detenerPollEscaneos(){
+    if(pollEscaneosId){ clearInterval(pollEscaneosId); pollEscaneosId = null; }
+  }
+  async function procesarEscaneosPendientes(){
+    if(!cloudEnabled || !state.turnoActual) return;
+    try{
+      const { data, error } = await supabaseClient
+        .from('escaneos_pendientes')
+        .select('*')
+        .eq('turno_id', state.turnoActual.id)
+        .eq('procesado', false)
+        .order('created_at', {ascending:true});
+      if(error || !data || !data.length) return;
+      for(const fila of data){
+        const codigo = (fila.codigo_barra||'').trim();
+        const p = state.products.find(x => (x.sku||'').trim().toLowerCase() === codigo.toLowerCase());
+        if(p && p.stock>0){
+          addToCart(p.id);
+          showToast(`Escaneado por ${fila.cajero}: ${p.name}`, 'success');
+        }else if(p){
+          showToast(`${p.name} escaneado pero sin existencia.`, 'warn');
+        }else{
+          showToast(`Código escaneado sin coincidencia: ${codigo}`, 'warn');
+        }
+        await supabaseClient.from('escaneos_pendientes').update({ procesado:true }).eq('id', fila.id);
+      }
+    }catch(e){ /* sin conexión: se reintenta en el siguiente ciclo */ }
+  }
+
   function renderTurnoEstado(){
     const area = document.getElementById('turnoEstadoArea');
     if(!area) return;
@@ -1695,6 +1734,7 @@
       showToast(`Turno abierto por ${cajero.nombre}.`, 'success');
       renderTurnoEstado();
       cargarTurnosRecientes();
+      iniciarPollEscaneos();
     }catch(e){ showToast('No se pudo conectar. Intenta de nuevo.', 'error'); }
   }
 
@@ -1737,6 +1777,7 @@
     closeModal();
     state.turnoActual = null;
     saveState();
+    detenerPollEscaneos();
     mostrarResultadoCorte({
       cajero: cajero.nombre, diferencia,
       detalle: [
@@ -1874,6 +1915,7 @@
     if(cloudEnabled && state.negocioId){
       verificarEstatus();
       flushSync();
+      if(state.turnoActual) iniciarPollEscaneos();
     }
   }
 

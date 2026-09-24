@@ -143,9 +143,11 @@
       const cajeroMatch = (cajeros||[]).find(c => c.codigo.trim().toLowerCase() === codigoCajero.toLowerCase());
       if(!cajeroMatch){ renderVinculo('Código de cajero no reconocido para este negocio.'); return; }
 
-      const { data: turnoData, error: turnoErr } = await supabaseClient
-        .from('turnos').select('*').eq('negocio_id', negocioData.id).eq('estado','abierto').maybeSingle();
+      const { data: turnosAbiertos, error: turnoErr } = await supabaseClient
+        .from('turnos').select('*').eq('negocio_id', negocioData.id).eq('estado','abierto')
+        .order('fecha_apertura', {ascending:false}).limit(1);
       if(turnoErr){ renderVinculo('Error al buscar el turno: ' + (turnoErr.message||'')); return; }
+      const turnoData = (turnosAbiertos && turnosAbiertos.length) ? turnosAbiertos[0] : null;
       if(!turnoData){ renderVinculo('No hay un turno abierto. Pide que lo abran en el punto de venta primero.'); return; }
 
       negocio = negocioData;
