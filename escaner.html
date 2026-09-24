@@ -193,6 +193,10 @@
         <div id="scanFeed" class="scan-feed"></div>
       </div>`;
     document.getElementById('salirBtn').addEventListener('click', salir);
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+    }catch(err){ /* audio no disponible: se ignora */ }
 
     if(!barcodeSoportado()){
       document.getElementById('app').innerHTML = `
@@ -242,24 +246,30 @@
   }
 
   async function enviarEscaneo(codigo){
-    agregarAlFeed(codigo, null);
+    const itemId = agregarAlFeed(codigo, null);
     try{
       const { error } = await supabaseClient.from('escaneos_pendientes').insert({
         negocio_id: negocio.id, turno_id: turno.id, codigo_barra: codigo, cajero: cajero.nombre
       });
-      actualizarFeed(codigo, !error, error ? (error.message || error.code || 'Error desconocido') : null);
+      actualizarFeed(itemId, !error, error ? (error.message || error.code || 'Error desconocido') : null);
     }catch(e){
-      actualizarFeed(codigo, false, 'Sin conexión');
+      actualizarFeed(itemId, false, 'Sin conexión');
     }
   }
 
   function agregarAlFeed(codigo, enviado){
-    feedItems.unshift({ codigo, hora: new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}), enviado, detalle:null });
+    const itemId = Date.now() + '_' + Math.random();
+    feedItems.unshift({ id:itemId, codigo, hora: new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}), enviado, detalle:null });
     feedItems = feedItems.slice(0, 8);
     pintarFeed();
+    setTimeout(()=>{
+      feedItems = feedItems.filter(f => f.id !== itemId);
+      pintarFeed();
+    }, 3000);
+    return itemId;
   }
-  function actualizarFeed(codigo, ok, detalle){
-    const item = feedItems.find(f => f.codigo === codigo && f.enviado === null);
+  function actualizarFeed(itemId, ok, detalle){
+    const item = feedItems.find(f => f.id === itemId);
     if(item){ item.enviado = ok; item.detalle = detalle || null; }
     pintarFeed();
   }
