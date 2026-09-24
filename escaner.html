@@ -80,9 +80,8 @@
   let scannerStream = null;
   let scannerLoopId = null;
   let scannerDetector = null;
-  let scannerLastCode = '';
-  let framesSinDeteccion = 0;
-  const FRAMES_PARA_LIBERAR = 10;
+  let escaneandoPausado = false;
+  const PAUSA_DESPUES_DE_ESCANEAR = 1200; // ms de "descanso" tras cada lectura exitosa
   let audioCtx = null;
   function reproducirBeep(){
     try{
@@ -183,6 +182,7 @@
   // ------------------------------------------------------------- Pantalla 2
   function iniciarEscaneo(){
     feedItems = [];
+    escaneandoPausado = false;
     document.getElementById('app').innerHTML = `
       <div class="scan-screen">
         <div class="scan-topbar">
@@ -238,23 +238,20 @@
   async function scannerLoop(){
     const video = document.getElementById('scanVideo');
     if(!video || !scannerDetector) return;
-    try{
-      const codigos = await scannerDetector.detect(video);
-      if(codigos && codigos.length){
-        framesSinDeteccion = 0;
-        const valor = codigos[0].rawValue;
-        if(valor && valor !== scannerLastCode){
-          scannerLastCode = valor;
-          reproducirBeep();
-          enviarEscaneo(valor);
+    if(!escaneandoPausado){
+      try{
+        const codigos = await scannerDetector.detect(video);
+        if(codigos && codigos.length){
+          const valor = codigos[0].rawValue;
+          if(valor){
+            reproducirBeep();
+            enviarEscaneo(valor);
+            escaneandoPausado = true;
+            setTimeout(()=>{ escaneandoPausado = false; }, PAUSA_DESPUES_DE_ESCANEAR);
+          }
         }
-      }else{
-        framesSinDeteccion++;
-        if(framesSinDeteccion >= FRAMES_PARA_LIBERAR){
-          scannerLastCode = ''; // llevas varios cuadros seguidos sin ver ningún código: el siguiente cuenta como nuevo
-        }
-      }
-    }catch(e){ /* frame no listo: seguir intentando */ }
+      }catch(e){ /* frame no listo: seguir intentando */ }
+    }
     if(scannerStream){ scannerLoopId = requestAnimationFrame(scannerLoop); }
   }
 
