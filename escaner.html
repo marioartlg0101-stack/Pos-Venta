@@ -220,8 +220,15 @@
         scannerDetector = new window.BarcodeDetector({ formats: BARCODE_FORMATS });
         scannerLoop();
       })
-      .catch(()=>{
-        agregarAlFeed('No se pudo acceder a la cámara. Revisa los permisos.', false);
+      .catch((err)=>{
+        const detalle = err ? ((err.name||'Error') + (err.message ? ': '+err.message : '')) : 'Error desconocido';
+        document.getElementById('app').innerHTML = `
+          <div class="block-overlay"><div class="card">
+            <h1>No se pudo abrir la cámara</h1>
+            <p class="sub">${escapeHTML(detalle)}</p>
+            <button type="button" class="btn-primary" id="volverBtnCam">Volver</button>
+          </div></div>`;
+        document.getElementById('volverBtnCam').addEventListener('click', ()=>renderVinculo());
       });
 
     if(vigilanciaTurnoId) clearInterval(vigilanciaTurnoId);
