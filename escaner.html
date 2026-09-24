@@ -89,6 +89,18 @@
     return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
   }
   function barcodeSoportado(){ return 'BarcodeDetector' in window; }
+  function esNavegadorEnApp(){
+    const ua = navigator.userAgent || '';
+    return /\bWhatsApp\b|FBAN|FBAV|Instagram|Line\/|MicroMessenger|Twitter/i.test(ua);
+  }
+  function renderAbrirEnChrome(){
+    document.getElementById('app').innerHTML = `
+      <div class="wrap"><div class="card">
+        <h1>Abre esto en Chrome</h1>
+        <p class="sub">Estás viendo esta página dentro de otra app (como WhatsApp), y por seguridad no te va a dejar usar la cámara ahí.</p>
+        <p class="sub">Toca los tres puntos (⋮) arriba y elige "Abrir en Chrome" o "Abrir en el navegador". Si no aparece esa opción, mantén presionado el link donde te lo compartieron → "Copiar enlace" → pégalo directo en Chrome.</p>
+      </div></div>`;
+  }
 
   // ------------------------------------------------------------- Pantalla 1
   function renderVinculo(errorMsg){
@@ -213,27 +225,27 @@
       const { error } = await supabaseClient.from('escaneos_pendientes').insert({
         negocio_id: negocio.id, turno_id: turno.id, codigo_barra: codigo, cajero: cajero.nombre
       });
-      actualizarFeed(codigo, !error);
+      actualizarFeed(codigo, !error, error ? (error.message || error.code || 'Error desconocido') : null);
     }catch(e){
-      actualizarFeed(codigo, false);
+      actualizarFeed(codigo, false, 'Sin conexión');
     }
   }
 
   function agregarAlFeed(codigo, enviado){
-    feedItems.unshift({ codigo, hora: new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}), enviado });
+    feedItems.unshift({ codigo, hora: new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}), enviado, detalle:null });
     feedItems = feedItems.slice(0, 8);
     pintarFeed();
   }
-  function actualizarFeed(codigo, ok){
+  function actualizarFeed(codigo, ok, detalle){
     const item = feedItems.find(f => f.codigo === codigo && f.enviado === null);
-    if(item) item.enviado = ok;
+    if(item){ item.enviado = ok; item.detalle = detalle || null; }
     pintarFeed();
   }
   function pintarFeed(){
     const el = document.getElementById('scanFeed');
     if(!el) return;
     el.innerHTML = feedItems.map(f=>{
-      const estado = f.enviado === null ? 'Enviando…' : (f.enviado ? 'Enviado' : 'Error al enviar');
+      let estado = f.enviado === null ? 'Enviando…' : (f.enviado ? 'Enviado' : ('Error: ' + escapeHTML(f.detalle || 'desconocido')));
       return `<div class="scan-feed-item ${f.enviado?'enviado':''}"><span>${escapeHTML(f.codigo)}</span><small>${estado} · ${f.hora}</small></div>`;
     }).join('');
   }
@@ -268,7 +280,11 @@
     renderVinculo();
   }
 
-  renderVinculo();
+  if(esNavegadorEnApp()){
+    renderAbrirEnChrome();
+  }else{
+    renderVinculo();
+  }
 </script>
 </body>
 </html>
