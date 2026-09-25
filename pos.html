@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#F3FBF6;
@@ -240,6 +241,7 @@
 
   /* ---------- Caja / turnos ---------- */
   .turno-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow); }
+  .excel-import-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
   .turno-card.abierto{ border-color:var(--green-500); }
   .turno-card h3{ font-size:1.05rem; margin-bottom:10px; }
   .turno-info-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:16px; }
@@ -345,7 +347,6 @@
       </div>
       <img id="brandLogoImg" class="brand-logo" style="display:none;" alt="" />
       <input id="businessNameInput" class="brand-name" maxlength="40" spellcheck="false" aria-label="Nombre del negocio" />
-      <span id="syncPill" class="sync-pill" style="display:none;"></span>
     </div>
   </header>
 
@@ -386,7 +387,7 @@
       </div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th></tr></thead>
           <tbody id="inventoryTableBody"></tbody>
         </table>
       </div>
@@ -446,6 +447,7 @@
           <h2>Administración</h2>
           <p class="panel-subtitle">Solo para el dueño del negocio: crea cajeros y controla el acceso con tu PIN.</p>
         </div>
+        <span id="syncPill" class="sync-pill" style="display:none;"></span>
       </div>
       <div id="adminArea"></div>
     </section>
@@ -1219,7 +1221,7 @@
   function renderInventory(){
     const tbody = document.getElementById('inventoryTableBody');
     if(state.products.length===0){
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay productos registrados todavía.</p><button type="button" class="btn-primary" data-action="open-add-product">Agregar el primero</button></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay productos registrados todavía.</p><button type="button" class="btn-primary" data-action="open-add-product">Agregar el primero</button></div></td></tr>`;
       return;
     }
     tbody.innerHTML = state.products.map(p=>{
@@ -1231,10 +1233,6 @@
         <td class="mono">${escapeHTML(p.sku||'—')}</td>
         <td class="num">${formatMoney(p.price)}</td>
         <td><span class="stock-pill stock-${level}">${p.stock} · ${stockLabel}</span></td>
-        <td class="row-actions">
-          <button type="button" class="link-btn" data-action="edit-product" data-id="${p.id}">Editar</button>
-          <button type="button" class="link-btn danger" data-action="delete-product" data-id="${p.id}">Eliminar</button>
-        </td>
       </tr>`;
     }).join('');
   }
@@ -1500,7 +1498,7 @@
     if(!(price>=0) || !(stock>=0)){ showToast('Revisa el precio y la existencia.', 'warn'); return; }
     updateProduct(id, {name, category, sku, price, cost, stock, minStock});
     closeModal();
-    renderInventory(); renderVenderGrid();
+    renderInventory(); renderVenderGrid(); renderInventarioAdminList();
     showToast('Producto actualizado.', 'success');
   }
 
@@ -1515,7 +1513,7 @@
   function handleConfirmDeleteProduct(id){
     deleteProduct(id);
     closeModal();
-    renderInventory(); renderVenderGrid();
+    renderInventory(); renderVenderGrid(); renderInventarioAdminList();
     showToast('Producto eliminado.', 'success');
   }
 
@@ -1772,9 +1770,28 @@
     }
     area.innerHTML = `
       <div class="panel-header">
-        <div><h2 style="font-size:1.1rem;">Cajeros</h2></div>
+        <div><h2 style="font-size:1.1rem;">Inventario (edición completa)</h2></div>
         <div class="panel-actions">
           <button type="button" class="btn-ghost btn-sm" data-action="lock-admin">Bloquear</button>
+        </div>
+      </div>
+      <p style="color:var(--ink-soft); font-size:.85rem; margin:0 0 14px;">Aquí sí puedes editar o eliminar productos — en la pestaña Inventario normal solo se puede agregar y recibir mercancía.</p>
+      <div class="excel-import-row">
+        <label class="btn-secondary btn-sm" style="cursor:pointer;">Cargar Excel
+          <input type="file" id="excelInventarioInput" accept=".xlsx,.xls,.csv" style="display:none;" />
+        </label>
+        <button type="button" class="link-btn" data-action="descargar-plantilla-excel">Descargar plantilla</button>
+      </div>
+      <div class="table-scroll" style="margin-top:14px;">
+        <table class="data-table">
+          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th><th>Acciones</th></tr></thead>
+          <tbody id="inventarioAdminTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel-header" style="margin-top:28px;">
+        <div><h2 style="font-size:1.1rem;">Cajeros</h2></div>
+        <div class="panel-actions">
           <button type="button" class="btn-primary btn-sm" data-action="open-add-cajero">Agregar cajero</button>
         </div>
       </div>
@@ -1793,8 +1810,113 @@
         <button type="button" class="btn-secondary btn-sm" data-action="save-admin-pin" style="align-self:flex-start;">Guardar nuevo PIN</button>
       </form>
     `;
+    renderInventarioAdminList();
     renderCajerosAdminList();
     refrescarCajeros();
+    const excelInput = document.getElementById('excelInventarioInput');
+    if(excelInput){ excelInput.addEventListener('change', handleCargarExcel); }
+  }
+
+  function renderInventarioAdminList(){
+    const tbody = document.getElementById('inventarioAdminTableBody');
+    if(!tbody) return;
+    if(!state.products.length){
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">Aún no tienes productos registrados.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = state.products.map(p=>{
+      const level = p.stock<=0 ? 'out' : (p.stock<=p.minStock ? 'low' : 'ok');
+      const stockLabel = p.stock<=0 ? 'Agotado' : (p.stock<=p.minStock ? 'Stock bajo' : 'Disponible');
+      return `<tr>
+        <td>${escapeHTML(p.name)}</td>
+        <td>${escapeHTML(p.category)}</td>
+        <td class="mono">${escapeHTML(p.sku||'—')}</td>
+        <td class="num">${formatMoney(p.price)}</td>
+        <td><span class="stock-pill stock-${level}">${p.stock} · ${stockLabel}</span></td>
+        <td class="row-actions">
+          <button type="button" class="link-btn" data-action="edit-product" data-id="${p.id}">Editar</button>
+          <button type="button" class="link-btn danger" data-action="delete-product" data-id="${p.id}">Eliminar</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function normalizarHeaderExcel(h){
+    return String(h||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  }
+  function mapaColumnasExcel(headers){
+    const map = {};
+    headers.forEach((h, idx)=>{
+      const n = normalizarHeaderExcel(h);
+      if(['nombre','producto','descripcion','articulo'].includes(n)) map.nombre = idx;
+      else if(['categoria','giro','tipo'].includes(n)) map.categoria = idx;
+      else if(['sku','codigo','codigo de barras','barcode'].includes(n)) map.sku = idx;
+      else if(['precio','precio venta','pvp'].includes(n)) map.precio = idx;
+      else if(['costo','costo unitario','precio compra'].includes(n)) map.costo = idx;
+      else if(['existencia','stock','cantidad','existencias'].includes(n)) map.existencia = idx;
+      else if(['stock minimo','minimo'].includes(n)) map.minimo = idx;
+    });
+    return map;
+  }
+  function descargarPlantillaExcel(){
+    if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el lector de Excel.', 'error'); return; }
+    const datos = [
+      ['Nombre','Categoría','SKU','Precio','Costo','Existencia','Stock mínimo'],
+      ['Ejemplo: Paracetamol 500mg','Medicamentos','7501012345678','25.00','15.00','40','5']
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(datos);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+    XLSX.writeFile(wb, 'plantilla_inventario.xlsx');
+  }
+  async function handleCargarExcel(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    if(bloqueadoPorSuspension()){ e.target.value=''; return; }
+    if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el lector de Excel.', 'error'); e.target.value=''; return; }
+    try{
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      if(!rows.length){ showToast('El archivo está vacío.', 'warn'); e.target.value=''; return; }
+      const headers = rows[0];
+      const map = mapaColumnasExcel(headers);
+      if(map.nombre===undefined || map.precio===undefined || map.existencia===undefined){
+        showToast('El Excel debe tener al menos columnas de Nombre, Precio y Existencia. Descarga la plantilla si no estás seguro del formato.', 'error');
+        e.target.value=''; return;
+      }
+      let creados = 0, actualizados = 0, omitidos = 0;
+      for(let i=1; i<rows.length; i++){
+        const row = rows[i];
+        if(!row || row.every(c=> c==='' || c===undefined)) continue;
+        const nombre = String(row[map.nombre]||'').trim();
+        const precio = Number(row[map.precio]);
+        const existencia = Number(row[map.existencia]);
+        if(!nombre || isNaN(precio) || isNaN(existencia)){ omitidos++; continue; }
+        const categoria = map.categoria!==undefined ? String(row[map.categoria]||'').trim() : '';
+        const sku = map.sku!==undefined ? String(row[map.sku]||'').trim() : '';
+        const costo = map.costo!==undefined ? (Number(row[map.costo])||0) : 0;
+        const minimo = (map.minimo!==undefined && row[map.minimo]!=='') ? Number(row[map.minimo]) : 5;
+        const existente = sku ? state.products.find(p => (p.sku||'').trim().toLowerCase() === sku.toLowerCase()) : null;
+        if(existente){
+          Object.assign(existente, { name:nombre, category: categoria||existente.category, sku, price:precio, cost:costo, stock:existencia, minStock:minimo });
+          actualizados++;
+        }else{
+          state.products.push({ id: uid('p_'), name:nombre, category: categoria||'General', sku, price:precio, cost:costo, stock:existencia, minStock:minimo });
+          creados++;
+        }
+      }
+      saveState();
+      markSnapshotDirty();
+      renderVenderGrid();
+      renderInventory();
+      renderInventarioAdminList();
+      showToast(`Importación lista: ${creados} nuevos, ${actualizados} actualizados, ${omitidos} omitidos.`, 'success');
+    }catch(err){
+      showToast('No se pudo leer el archivo: ' + (err.message||'formato no reconocido'), 'error');
+    }
+    e.target.value = '';
   }
 
   function renderCajerosAdminList(){
@@ -2063,6 +2185,7 @@
         }
         break;
       }
+      case 'descargar-plantilla-excel': descargarPlantillaExcel(); break;
     }
   });
 
