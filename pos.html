@@ -206,6 +206,9 @@
   .method-btn.active{ border-color:var(--green-600); background:var(--surface-alt); color:var(--green-700); }
 
   .cash-row{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; padding:12px; background:var(--surface-alt); border-radius:var(--radius-sm); }
+  .descuento-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .descuento-row label{ font-size:.85rem; font-weight:600; color:var(--ink-soft); }
+  .descuento-row input{ width:80px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; text-align:right; font-size:.95rem; }
   .mixto-link{ display:block; text-align:center; margin-bottom:12px; }
   .mixto-fields{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; padding:12px; background:var(--surface-alt); border-radius:var(--radius-sm); }
   .mixto-fields label{ display:flex; flex-direction:column; gap:4px; font-size:.78rem; font-weight:600; color:var(--ink-soft); }
@@ -391,7 +394,7 @@
       </div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th></tr></thead>
+          <thead id="inventoryTableHead"><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th></tr></thead>
           <tbody id="inventoryTableBody"></tbody>
         </table>
       </div>
@@ -478,7 +481,7 @@
       negocioId:null, negocioCodigo:null, estatusCache:'activo',
       negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false, colorPrimario:'', facturacionHabilitada:false, adminPin:'',
       turnoActual:null, cajeros:[],
-      pendingVentas:[], pendingMovimientos:[], snapshotDirty:false
+      pendingVentas:[], pendingMovimientos:[], pendingCancelaciones:[], snapshotDirty:false
     };
   }
   function loadState(){
@@ -507,6 +510,7 @@
   let venderSearch = '';
   let selectedMethod = null;
   let pagoMixtoDraft = { efectivo:'', transferencia:'', terminal:'' };
+  let descuentoPct = 0;
   let quiereFactura = false;
   let datosFiscalesDraft = { rfc:'', razon_social:'', codigo_postal:'', regimen_fiscal:'', uso_cfdi:'', correo:'' };
   let receivedDraft = '';
@@ -783,7 +787,9 @@
           negocio_id: state.negocioId, folio: v.folio, fecha_hora: v.dateISO,
           items: v.items, total: v.total, metodo: v.method, recibido: v.received, cambio: v.change,
           requiere_factura: !!v.requiereFactura, datos_fiscales: v.datosFiscales || null,
-          pago_mixto: v.pagoMixto || null, turno_id: v.turnoId || null
+          pago_mixto: v.pagoMixto || null, turno_id: v.turnoId || null,
+          descuento_pct: v.descuentoPct || 0, subtotal_antes_descuento: v.subtotalAntesDescuento || v.total,
+          cancelada: !!v.cancelada
         });
         if(error) break;
         state.pendingVentas.shift();
@@ -797,6 +803,15 @@
         });
         if(error) break;
         state.pendingMovimientos.shift();
+        saveState();
+      }
+      while(state.pendingCancelaciones.length){
+        const c = state.pendingCancelaciones[0];
+        const { error } = await supabaseClient.from('ventas').update({
+          cancelada: true, cancelada_por: c.cancelada_por, cancelada_en: c.cancelada_en, motivo_cancelacion: c.motivo || null
+        }).eq('negocio_id', state.negocioId).eq('folio', c.folio);
+        if(error) break;
+        state.pendingCancelaciones.shift();
         saveState();
       }
       if(state.snapshotDirty){
@@ -981,10 +996,15 @@
   function cartTotal(){
     return cart.reduce((sum,c)=> sum + c.price*c.qty, 0);
   }
+  function totalConDescuento(){
+    const pct = Number(descuentoPct)||0;
+    return cartTotal() * (1 - Math.min(Math.max(pct,0),100)/100);
+  }
   function clearCart(){
     cart = [];
     selectedMethod = null;
     receivedDraft = '';
+    descuentoPct = 0;
     pagoMixtoDraft = { efectivo:'', transferencia:'', terminal:'' };
     quiereFactura = false;
     datosFiscalesDraft = { rfc:'', razon_social:'', codigo_postal:'', regimen_fiscal:'', uso_cfdi:'', correo:'' };
@@ -1006,7 +1026,8 @@
     }
     if(cart.length===0){ showToast('Agrega al menos un producto para cobrar.', 'warn'); return; }
     if(!selectedMethod){ showToast('Selecciona un método de pago.', 'warn'); return; }
-    const total = cartTotal();
+    const subtotal = cartTotal();
+    const total = totalConDescuento();
     let received = null, change = null, pagoMixto = null;
     if(selectedMethod==='efectivo'){
       received = Number(receivedDraft || 0);
@@ -1036,10 +1057,12 @@
     state.sales.push({
       id: uid('s_'), folio, dateISO: new Date().toISOString(),
       items: cart.map(c=>({productId:c.productId, name:c.name, qty:c.qty, price:c.price, cost:c.cost||0})),
-      total, method:selectedMethod, received, change, pagoMixto,
+      total, subtotalAntesDescuento: subtotal, descuentoPct: Number(descuentoPct)||0,
+      method:selectedMethod, received, change, pagoMixto,
       requiereFactura: facturaSolicitada,
       datosFiscales: facturaSolicitada ? {...datosFiscalesDraft} : null,
-      turnoId: state.turnoActual ? state.turnoActual.id : null
+      turnoId: state.turnoActual ? state.turnoActual.id : null,
+      cancelada: false
     });
     state.nextFolio++;
     saveState();
@@ -1137,13 +1160,23 @@
   }
   function renderCartSummary(){
     const area = document.getElementById('cartSummaryArea');
-    const total = cartTotal();
+    const subtotal = cartTotal();
+    const total = totalConDescuento();
     const methods = [
       {id:'efectivo', label:'Efectivo', icon:ICON_CASH},
       {id:'transferencia', label:'Transferencia', icon:ICON_TRANSFER},
       {id:'terminal', label:'Terminal bancaria', icon:ICON_TERMINAL}
     ];
-    let html = `<div class="cart-total-row"><span>Total</span><strong>${formatMoney(total)}</strong></div>`;
+    let html = '';
+    html += `<div class="descuento-row">
+      <label for="descuentoInput">Descuento %</label>
+      <input id="descuentoInput" type="number" min="0" max="100" step="1" placeholder="0" value="${descuentoPct ? escapeHTML(String(descuentoPct)) : ''}" />
+    </div>`;
+    if(Number(descuentoPct)>0){
+      html += `<div class="cart-total-row" style="font-size:.85rem; color:var(--ink-soft);"><span>Subtotal</span><span>${formatMoney(subtotal)}</span></div>`;
+      html += `<div class="cart-total-row" style="font-size:.85rem; color:var(--red);"><span>Descuento (${descuentoPct}%)</span><span>-${formatMoney(subtotal-total)}</span></div>`;
+    }
+    html += `<div class="cart-total-row"><span>Total</span><strong>${formatMoney(total)}</strong></div>`;
     html += `<div class="method-row">`;
     methods.forEach(m=>{
       html += `<button type="button" class="method-btn ${selectedMethod===m.id?'active':''}" data-action="set-method" data-method="${m.id}">${m.icon}<span>${m.label}</span></button>`;
@@ -1194,11 +1227,20 @@
   function facturaEstaIncompleta(){
     return state.facturacionHabilitada && quiereFactura && (!datosFiscalesDraft.rfc || !datosFiscalesDraft.razon_social || !datosFiscalesDraft.codigo_postal || !datosFiscalesDraft.regimen_fiscal || !datosFiscalesDraft.uso_cfdi);
   }
+  function updateDescuentoDisplay(){
+    const input = document.getElementById('descuentoInput');
+    if(!input) return;
+    const val = input.value;
+    descuentoPct = val==='' ? 0 : Math.min(Math.max(Number(val)||0,0),100);
+    renderCartSummary();
+    const el = document.getElementById('descuentoInput');
+    if(el) el.focus();
+  }
   function updateMixtoDisplay(){
     pagoMixtoDraft.efectivo = document.getElementById('mixEfectivo')?.value || '';
     pagoMixtoDraft.transferencia = document.getElementById('mixTransferencia')?.value || '';
     pagoMixtoDraft.terminal = document.getElementById('mixTerminal')?.value || '';
-    const total = cartTotal();
+    const total = totalConDescuento();
     const restante = total - mixtoAsignado();
     const valEl = document.getElementById('mixtoRestanteValue');
     if(valEl){
@@ -1213,7 +1255,7 @@
     const input = document.getElementById('recibidoInput');
     if(!input) return;
     receivedDraft = input.value;
-    const total = cartTotal();
+    const total = totalConDescuento();
     const change = Number(receivedDraft||0) - total;
     const cambioEl = document.getElementById('cambioValue');
     if(cambioEl) cambioEl.textContent = formatMoney(Math.max(change,0));
@@ -1224,8 +1266,11 @@
   // ---------- Rendering: Inventario ----------
   function renderInventory(){
     const tbody = document.getElementById('inventoryTableBody');
+    const thead = document.getElementById('inventoryTableHead');
+    const supervisor = esSupervisorActivo();
+    if(thead) thead.innerHTML = `<tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th>${supervisor?'<th>Acciones</th>':''}</tr>`;
     if(state.products.length===0){
-      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay productos registrados todavía.</p><button type="button" class="btn-primary" data-action="open-add-product">Agregar el primero</button></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${supervisor?6:5}"><div class="empty-state"><p>No hay productos registrados todavía.</p><button type="button" class="btn-primary" data-action="open-add-product">Agregar el primero</button></div></td></tr>`;
       return;
     }
     tbody.innerHTML = state.products.map(p=>{
@@ -1237,6 +1282,10 @@
         <td class="mono">${escapeHTML(p.sku||'—')}</td>
         <td class="num">${formatMoney(p.price)}</td>
         <td><span class="stock-pill stock-${level}">${p.stock} · ${stockLabel}</span></td>
+        ${supervisor ? `<td class="row-actions">
+          <button type="button" class="link-btn" data-action="edit-product" data-id="${p.id}">Editar</button>
+          <button type="button" class="link-btn danger" data-action="delete-product" data-id="${p.id}">Eliminar</button>
+        </td>` : ''}
       </tr>`;
     }).join('');
   }
@@ -1313,9 +1362,10 @@
     closeModal();
   }
 
-  function printReceipt(saleId){
+  function printReceipt(saleId, esReimpresion){
     const sale = state.sales.find(s=>s.id===saleId);
     if(!sale){ showToast('No se encontró el ticket.', 'error'); return; }
+    if(esReimpresion){ logEvento('reimpresion_ticket', { folio: sale.folio }); }
     const el = document.getElementById('printReceipt');
     const d = new Date(sale.dateISO);
     const dateStr = d.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
@@ -1490,6 +1540,7 @@
     `);
   }
   function handleSaveEditProduct(id){
+    if(!puedeGestionar()){ showToast('Necesitas el PIN de Administración o un turno de supervisor.', 'error'); return; }
     const form = document.getElementById('editProductForm');
     const name = form.name.value.trim();
     const category = form.category.value.trim() || 'General';
@@ -1507,6 +1558,7 @@
   }
 
   function openDeleteConfirm(id){
+    if(!puedeGestionar()){ showToast('Necesitas el PIN de Administración o un turno de supervisor.', 'error'); return; }
     const p = state.products.find(x=>x.id===id);
     if(!p) return;
     openModal('Eliminar producto', `<p>¿Seguro que quieres eliminar <strong>${escapeHTML(p.name)}</strong> del inventario? Esta acción no se puede deshacer.</p>`, `
@@ -1515,6 +1567,7 @@
     `);
   }
   function handleConfirmDeleteProduct(id){
+    if(!puedeGestionar()){ showToast('Necesitas el PIN de Administración o un turno de supervisor.', 'error'); return; }
     deleteProduct(id);
     closeModal();
     renderInventory(); renderVenderGrid(); renderInventarioAdminList();
@@ -1526,9 +1579,10 @@
     const input = document.getElementById('ventasDateInput');
     if(input && input.value !== ventasDate) input.value = ventasDate;
     const daySales = state.sales.filter(s=> dateStrFromISO(s.dateISO) === ventasDate);
-    const total = daySales.reduce((sum,s)=> sum+s.total, 0);
+    const vigentes = daySales.filter(s=> !s.cancelada);
+    const total = vigentes.reduce((sum,s)=> sum+s.total, 0);
     const byMethod = {efectivo:0, transferencia:0, terminal:0};
-    daySales.forEach(s=>{
+    vigentes.forEach(s=>{
       if(s.method==='mixto' && s.pagoMixto){
         byMethod.efectivo += Number(s.pagoMixto.efectivo)||0;
         byMethod.transferencia += Number(s.pagoMixto.transferencia)||0;
@@ -1542,7 +1596,7 @@
       <div class="summary-card summary-total">
         <span class="summary-label">Total del día</span>
         <span class="summary-value">${formatMoney(total)}</span>
-        <span class="summary-sub">${daySales.length} venta${daySales.length===1?'':'s'}</span>
+        <span class="summary-sub">${vigentes.length} venta${vigentes.length===1?'':'s'}${daySales.length>vigentes.length ? ` · ${daySales.length-vigentes.length} cancelada(s)` : ''}</span>
       </div>
       <div class="summary-card">
         <span class="summary-label">Efectivo</span>
@@ -1567,13 +1621,20 @@
     tbody.innerHTML = sorted.map(s=>{
       const time = new Date(s.dateISO).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
       const itemsSummary = s.items.map(i=>`${i.qty}× ${escapeHTML(i.name)}`).join(', ');
-      return `<tr>
+      const etiquetas = [];
+      if(s.cancelada) etiquetas.push('<span class="stock-pill stock-out">Cancelada</span>');
+      if(s.requiereFactura) etiquetas.push('<span class="stock-pill stock-ok">Facturó</span>');
+      return `<tr style="${s.cancelada?'opacity:.55;':''}">
         <td>${time}</td>
         <td class="mono">${s.folio}</td>
-        <td>${itemsSummary}</td>
+        <td>${itemsSummary}${etiquetas.length?'<br>'+etiquetas.join(' '):''}</td>
         <td>${methodDisplay(s)}</td>
         <td class="num">${formatMoney(s.total)}</td>
-        <td class="row-actions"><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button><button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button></td>
+        <td class="row-actions">
+          <button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}" data-reimpresion="true">Imprimir</button>
+          <button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button>
+          ${!s.cancelada ? `<button type="button" class="link-btn danger" data-action="open-cancelar-venta" data-id="${s.id}">Cancelar</button>` : ''}
+        </td>
       </tr>`;
     }).join('');
   }
@@ -1593,10 +1654,17 @@
         const d = new Date(s.dateISO);
         const dateStr = d.toLocaleDateString('es-MX');
         const timeStr = d.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
-        return `<tr>
-          <td>${dateStr}</td><td>${timeStr}</td><td class="mono">${s.folio}</td><td>${methodDisplay(s)}</td>
+        const etiquetas = [];
+        if(s.cancelada) etiquetas.push('<span class="stock-pill stock-out">Cancelada</span>');
+        if(s.requiereFactura) etiquetas.push('<span class="stock-pill stock-ok">Facturó</span>');
+        return `<tr style="${s.cancelada?'opacity:.55;':''}">
+          <td>${dateStr}</td><td>${timeStr}</td><td class="mono">${s.folio}${etiquetas.length?'<br>'+etiquetas.join(' '):''}</td><td>${methodDisplay(s)}</td>
           <td class="num">${formatMoney(s.total)}</td>
-          <td class="row-actions"><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button><button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button></td>
+          <td class="row-actions">
+            <button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}" data-reimpresion="true">Imprimir</button>
+            <button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button>
+            ${!s.cancelada ? `<button type="button" class="link-btn danger" data-action="open-cancelar-venta" data-id="${s.id}">Cancelar</button>` : ''}
+          </td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
@@ -1606,6 +1674,57 @@
     d.setDate(d.getDate()+delta);
     ventasDate = toDateInputValue(d);
     renderVentas();
+  }
+
+  function abrirCancelarVentaModal(saleId){
+    const s = state.sales.find(x=>x.id===saleId);
+    if(!s){ return; }
+    if(s.cancelada){ showToast('Esa venta ya está cancelada.', 'warn'); return; }
+    const necesitaPin = !puedeGestionar();
+    openModal(`Cancelar venta ${s.folio}`, `
+      <p style="font-size:.9rem; color:var(--ink-soft);">Esto restaura la existencia de los productos vendidos. No se puede deshacer.</p>
+      ${necesitaPin ? `
+        <form id="cancelarVentaForm" class="form-grid">
+          <label>PIN de Administración*<input required name="pin" type="password" inputmode="numeric" autocomplete="off" /></label>
+        </form>
+        <p class="error-text" id="cancelarVentaError" style="display:none; color:var(--red); font-size:.85rem; margin-top:8px;"></p>
+      ` : ''}
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
+      <button type="button" class="btn-danger" data-action="confirmar-cancelar-venta" data-id="${s.id}">Cancelar venta</button>
+    `);
+  }
+
+  function handleConfirmarCancelarVenta(saleId){
+    const s = state.sales.find(x=>x.id===saleId);
+    if(!s || s.cancelada) return;
+    if(!puedeGestionar()){
+      const form = document.getElementById('cancelarVentaForm');
+      const pin = form ? form.pin.value.trim() : '';
+      if(!pin || pin !== state.adminPin){
+        const err = document.getElementById('cancelarVentaError');
+        if(err){ err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; }
+        return;
+      }
+    }
+    s.items.forEach(item=>{
+      const p = state.products.find(x=>x.id===item.productId);
+      if(p) p.stock += item.qty;
+    });
+    s.cancelada = true;
+    const canceladaPor = state.turnoActual ? state.turnoActual.cajeroApertura : 'Administrador';
+    const canceladaEn = new Date().toISOString();
+    s.canceladaPor = canceladaPor;
+    s.canceladaEn = canceladaEn;
+    saveState();
+    markSnapshotDirty();
+    state.pendingCancelaciones.push({ folio: s.folio, cancelada_por: canceladaPor, cancelada_en: canceladaEn });
+    saveState();
+    flushSync();
+    logEvento('cancelacion_venta', { folio: s.folio, total: s.total });
+    closeModal();
+    renderVentas(); renderVenderGrid();
+    showToast('Venta cancelada y existencia restaurada.', 'success');
   }
 
   // ---------- Rendering: Buscar ----------
@@ -1684,12 +1803,13 @@
       <div class="turno-card abierto">
         <h3>Turno abierto</h3>
         <div class="turno-info-grid">
-          <div><span>Cajero</span><strong>${escapeHTML(t.cajeroApertura)}</strong></div>
+          <div><span>Cajero</span><strong>${escapeHTML(t.cajeroApertura)}${t.esSupervisor ? ' · Supervisor' : ''}</strong></div>
           <div><span>Abierto desde</span><strong>${new Date(t.fechaApertura).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}</strong></div>
           <div><span>Fondo inicial</span><strong>${formatMoney(t.fondoInicial)}</strong></div>
           <div><span>Ventas del turno</span><strong>${formatMoney(totalVentasTurno)}</strong></div>
         </div>
         <button type="button" class="btn-primary" data-action="open-cerrar-turno">Cerrar turno / Hacer corte</button>
+        ${t.esSupervisor ? `<button type="button" class="btn-secondary btn-sm" data-action="open-add-cajero" style="margin-top:10px;">Agregar cajero</button>` : ''}
       </div>`;
   }
 
@@ -1817,7 +1937,7 @@
         </div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Nombre</th><th>Código</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Código</th><th>Rol</th><th>Acciones</th></tr></thead>
             <tbody id="cajerosAdminTableBody"></tbody>
           </table>
         </div>`;
@@ -1981,17 +2101,43 @@
     const tbody = document.getElementById('cajerosAdminTableBody');
     if(!tbody) return;
     if(!state.cajeros.length){
-      tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state">Aún no tienes cajeros registrados.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">Aún no tienes cajeros registrados.</div></td></tr>`;
       return;
     }
     tbody.innerHTML = state.cajeros.map(c=>`<tr>
       <td>${escapeHTML(c.nombre)}</td>
       <td class="mono"><span class="codigo-oculto" data-revelado="false">••••••</span></td>
+      <td>${c.rol==='supervisor' ? '<span class="stock-pill stock-ok">Supervisor</span>' : 'Cajero'}</td>
       <td class="row-actions">
         <button type="button" class="link-btn" data-action="toggle-codigo-cajero" data-codigo="${escapeHTML(c.codigo)}">Ver código</button>
         <button type="button" class="link-btn" data-action="ver-movimientos-cajero" data-nombre="${escapeHTML(c.nombre)}">Ver movimientos</button>
+        <button type="button" class="link-btn" data-action="toggle-supervisor-cajero" data-id="${c.id}" data-nombre="${escapeHTML(c.nombre)}" data-rol="${c.rol||'cajero'}">${c.rol==='supervisor' ? 'Quitar permisos' : 'Otorgar permisos'}</button>
       </td>
     </tr>`).join('');
+  }
+
+  async function logEvento(tipo, detalle, cajeroOverride){
+    if(!cloudEnabled || !state.negocioId) return;
+    try{
+      await supabaseClient.from('eventos_actividad').insert({
+        negocio_id: state.negocioId,
+        turno_id: state.turnoActual ? state.turnoActual.id : null,
+        cajero: cajeroOverride || (state.turnoActual ? state.turnoActual.cajeroApertura : 'Administrador'),
+        tipo, detalle: detalle || null
+      });
+    }catch(e){ /* no se pudo registrar el evento: se ignora, no bloquea la acción principal */ }
+  }
+
+  async function handleToggleSupervisorCajero(cajeroId, nombre, rolActual){
+    if(!adminDesbloqueado){ showToast('Solo el dueño (con su PIN) puede otorgar o quitar permisos de supervisor.', 'error'); return; }
+    const nuevoRol = rolActual==='supervisor' ? 'cajero' : 'supervisor';
+    try{
+      const { error } = await supabaseClient.from('cajeros').update({ rol: nuevoRol }).eq('id', cajeroId);
+      if(error){ showToast('No se pudo actualizar.', 'error'); return; }
+      await logEvento(nuevoRol==='supervisor' ? 'otorgar_supervisor' : 'quitar_supervisor', { cajero: nombre }, nombre);
+      showToast(nuevoRol==='supervisor' ? `${nombre} ahora es supervisor.` : `Se le quitaron los permisos de supervisor a ${nombre}.`, 'success');
+      await refrescarCajeros();
+    }catch(e){ showToast('No se pudo conectar. Intenta de nuevo.', 'error'); }
   }
 
   async function abrirMovimientosCajero(nombre){
@@ -2000,24 +2146,57 @@
     `);
     if(!cloudEnabled || !state.negocioId) return;
     try{
-      const { data, error } = await supabaseClient.from('turnos').select('*')
-        .eq('negocio_id', state.negocioId)
-        .or(`cajero_apertura.eq.${nombre},cajero_cierre.eq.${nombre}`)
-        .order('fecha_apertura', {ascending:false})
-        .limit(30);
+      const [{ data: turnos, error: errTurnos }, { data: eventos }] = await Promise.all([
+        supabaseClient.from('turnos').select('*')
+          .eq('negocio_id', state.negocioId)
+          .or(`cajero_apertura.eq.${nombre},cajero_cierre.eq.${nombre}`)
+          .order('fecha_apertura', {ascending:false}).limit(30),
+        supabaseClient.from('eventos_actividad').select('*')
+          .eq('negocio_id', state.negocioId).eq('cajero', nombre)
+          .order('created_at', {ascending:false}).limit(50)
+      ]);
       const body = document.querySelector('.modal-body');
       if(!body) return;
-      if(error){ body.innerHTML = `<p class="error-text">No se pudo cargar: ${escapeHTML(error.message||'')}</p>`; return; }
-      if(!data || !data.length){ body.innerHTML = `<div class="empty-state">Sin turnos registrados para este cajero.</div>`; return; }
-      body.innerHTML = data.map(t=>{
-        const apertura = new Date(t.fecha_apertura).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
-        const cierre = t.fecha_cierre ? new Date(t.fecha_cierre).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : 'Sigue abierto';
-        const roles = [];
-        if(t.cajero_apertura===nombre) roles.push('Abrió');
-        if(t.cajero_cierre===nombre) roles.push('Cerró');
-        const dif = (t.diferencia!==null && t.diferencia!==undefined) ? Number(t.diferencia) : null;
-        const difLabel = dif===null ? '—' : (Math.abs(dif)<0.01 ? 'Cuadra' : (dif<0 ? 'Faltante '+formatMoney(Math.abs(dif)) : 'Excedente '+formatMoney(dif)));
-        return `<div class="corte-detalle-row"><span>${apertura} → ${escapeHTML(cierre)}</span><span>${roles.join(' / ')} · ${difLabel}</span></div>`;
+      if(errTurnos){ body.innerHTML = `<p class="error-text">No se pudo cargar: ${escapeHTML(errTurnos.message||'')}</p>`; return; }
+
+      const turnosPropios = (turnos||[]).filter(t=> t.cajero_apertura===nombre).map(t=>t.id);
+      let ventas = [];
+      if(turnosPropios.length){
+        const { data: ventasData } = await supabaseClient.from('ventas').select('*')
+          .in('turno_id', turnosPropios)
+          .order('fecha_hora', {ascending:false}).limit(100);
+        ventas = ventasData || [];
+      }
+
+      const linea = [];
+      (turnos||[]).forEach(t=>{
+        if(t.cajero_apertura===nombre){
+          linea.push({ fecha: new Date(t.fecha_apertura), texto: `Abrió turno (fondo ${formatMoney(t.fondo_inicial||0)})` });
+        }
+        if(t.cajero_cierre===nombre && t.fecha_cierre){
+          const dif = (t.diferencia!==null && t.diferencia!==undefined) ? Number(t.diferencia) : null;
+          const difLabel = dif===null ? '' : (Math.abs(dif)<0.01 ? ' · Cuadró' : (dif<0 ? ` · Faltante ${formatMoney(Math.abs(dif))}` : ` · Excedente ${formatMoney(dif)}`));
+          linea.push({ fecha: new Date(t.fecha_cierre), texto: `Cerró turno${difLabel}` });
+        }
+      });
+      ventas.forEach(v=>{
+        const etiquetas = [];
+        if(v.cancelada) etiquetas.push('Cancelada');
+        if(v.requiere_factura) etiquetas.push('Facturó');
+        linea.push({ fecha: new Date(v.fecha_hora), texto: `Cobro ${v.folio} · ${formatMoney(v.total)}${etiquetas.length ? ' · '+etiquetas.join(' · ') : ''}` });
+      });
+      (eventos||[]).forEach(e=>{
+        const folio = e.detalle && e.detalle.folio ? e.detalle.folio : '';
+        if(e.tipo==='reimpresion_ticket'){ linea.push({ fecha: new Date(e.created_at), texto: `Reimprimió ticket ${folio}` }); }
+        else if(e.tipo==='cancelacion_venta'){ linea.push({ fecha: new Date(e.created_at), texto: `Canceló la venta ${folio}` }); }
+        else if(e.tipo==='otorgar_supervisor'){ linea.push({ fecha: new Date(e.created_at), texto: `Se le otorgaron permisos de supervisor` }); }
+        else if(e.tipo==='quitar_supervisor'){ linea.push({ fecha: new Date(e.created_at), texto: `Se le quitaron los permisos de supervisor` }); }
+      });
+      linea.sort((a,b)=> b.fecha - a.fecha);
+      if(!linea.length){ body.innerHTML = `<div class="empty-state">Sin actividad registrada para este cajero.</div>`; return; }
+      body.innerHTML = linea.slice(0,80).map(item=>{
+        const fechaStr = item.fecha.toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
+        return `<div class="corte-detalle-row"><span>${fechaStr}</span><span>${escapeHTML(item.texto)}</span></div>`;
       }).join('');
     }catch(e){
       const body = document.querySelector('.modal-body');
@@ -2063,20 +2242,31 @@
       <form id="addCajeroForm" class="form-grid">
         <label>Nombre*<input required name="nombre" type="text" /></label>
         <label>Código único*<input required name="codigo" type="text" placeholder="Ej. 1234" autocomplete="off" /></label>
+        <label style="flex-direction:row; align-items:center; gap:8px; font-weight:400;">
+          <input type="checkbox" name="supervisor" style="width:auto;" />
+          <span>Otorgar permisos de supervisor (puede agregar cajeros, cancelar ventas y editar inventario, sin necesitar el PIN)</span>
+        </label>
       </form>
     `, `
       <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
       <button type="button" class="btn-primary" data-action="save-cajero">Guardar</button>
     `);
   }
+  function esSupervisorActivo(){
+    return !!(state.turnoActual && state.turnoActual.esSupervisor);
+  }
+  function puedeGestionar(){
+    return adminDesbloqueado || esSupervisorActivo();
+  }
   async function handleSaveCajero(){
-    if(!adminDesbloqueado){ showToast('Necesitas desbloquear Administración con tu PIN.', 'error'); return; }
+    if(!puedeGestionar()){ showToast('Necesitas desbloquear Administración con tu PIN, o tener un turno de supervisor abierto.', 'error'); return; }
     const form = document.getElementById('addCajeroForm');
     const nombre = form.nombre.value.trim();
     const codigo = form.codigo.value.trim();
+    const rol = form.supervisor.checked ? 'supervisor' : 'cajero';
     if(!nombre || !codigo){ showToast('Nombre y código son obligatorios.', 'warn'); return; }
     try{
-      const { error } = await supabaseClient.from('cajeros').insert({ negocio_id: state.negocioId, nombre, codigo });
+      const { error } = await supabaseClient.from('cajeros').insert({ negocio_id: state.negocioId, nombre, codigo, rol });
       if(error){
         showToast((error.message||'').includes('duplicate') ? 'Ese código ya está en uso.' : 'No se pudo guardar.', 'error');
         return;
@@ -2110,7 +2300,7 @@
         negocio_id: state.negocioId, cajero_apertura: cajero.nombre, fondo_inicial: fondoInicial
       }).select().single();
       if(error || !data){ showToast('No se pudo abrir el turno.', 'error'); return; }
-      state.turnoActual = { id: data.id, cajeroApertura: cajero.nombre, fondoInicial, fechaApertura: data.fecha_apertura };
+      state.turnoActual = { id: data.id, cajeroApertura: cajero.nombre, fondoInicial, fechaApertura: data.fecha_apertura, esSupervisor: cajero.rol==='supervisor' };
       saveState();
       closeModal();
       showToast(`Turno abierto por ${cajero.nombre}.`, 'success');
@@ -2255,7 +2445,7 @@
       case 'confirm-delete-product': handleConfirmDeleteProduct(id); break;
       case 'ventas-prev-day': shiftVentasDate(-1); break;
       case 'ventas-next-day': shiftVentasDate(1); break;
-      case 'print-ticket': printReceipt(id); break;
+      case 'print-ticket': printReceipt(id, btn.dataset.reimpresion==='true'); break;
       case 'open-whatsapp-ticket': openWhatsappTicketModal(id); break;
       case 'confirm-send-whatsapp': handleConfirmSendWhatsapp(id); break;
       case 'open-add-cajero': openAddCajeroModal(); break;
@@ -2281,6 +2471,9 @@
       case 'confirmar-modo-excel': handleConfirmarModoExcel(); break;
       case 'admin-subtab': adminSubTab = btn.dataset.sub; renderAdministracion(); break;
       case 'ver-movimientos-cajero': abrirMovimientosCajero(btn.dataset.nombre); break;
+      case 'toggle-supervisor-cajero': handleToggleSupervisorCajero(btn.dataset.id, btn.dataset.nombre, btn.dataset.rol); break;
+      case 'open-cancelar-venta': abrirCancelarVentaModal(btn.dataset.id); break;
+      case 'confirmar-cancelar-venta': handleConfirmarCancelarVenta(btn.dataset.id); break;
     }
   });
 
@@ -2288,6 +2481,7 @@
     if(e.target.id==='venderSearchInput'){ venderSearch = e.target.value; renderVenderGrid(); }
     else if(e.target.id==='recibidoInput'){ updateChangeDisplay(); }
     else if(e.target.id==='mixEfectivo' || e.target.id==='mixTransferencia' || e.target.id==='mixTerminal'){ updateMixtoDisplay(); }
+    else if(e.target.id==='descuentoInput'){ updateDescuentoDisplay(); }
     else if(e.target.id==='folioSearchInput'){ renderFolioSearch(e.target.value); }
   });
 

@@ -119,6 +119,7 @@
   .report-card .v{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.1rem; }
   .empty-state{ padding:30px; text-align:center; color:var(--ink-soft); }
   .mono{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  .pin-reveal-row{ display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--surface-alt); border-radius:var(--radius-sm); }
   #toastRoot{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:200; }
   .toast{ background:var(--ink); color:var(--bg); padding:12px 20px; border-radius:999px; font-size:.9rem; font-weight:600; box-shadow:0 10px 30px -10px rgba(0,0,0,.4); }
   .toast-success{ background:var(--green-700); color:#fff; }
@@ -395,9 +396,10 @@
     activeNegocioId = negocioId;
     const negocio = negocios.find(n=>n.id===negocioId);
     if(!negocio) return;
-    const [{ data: pagos }, { data: snap }] = await Promise.all([
+    const [{ data: pagos }, { data: snap }, { data: cajerosCliente }] = await Promise.all([
       supabaseClient.from('pagos').select('*').eq('negocio_id', negocioId).order('fecha', {ascending:false}),
-      supabaseClient.from('inventario_snapshot').select('*').eq('negocio_id', negocioId).maybeSingle()
+      supabaseClient.from('inventario_snapshot').select('*').eq('negocio_id', negocioId).maybeSingle(),
+      supabaseClient.from('cajeros').select('*').eq('negocio_id', negocioId).eq('activo', true).order('nombre')
     ]);
     const dias = diasRestantes(negocio.fecha_proximo_pago);
     clienteSubTab = 'pagos';
@@ -417,6 +419,7 @@
       <div class="admin-subnav">
         <button type="button" class="sub-tab-btn active" data-subtab="pagos">Pagos</button>
         <button type="button" class="sub-tab-btn" data-subtab="inventario">Inventario</button>
+        <button type="button" class="sub-tab-btn" data-subtab="usuarios">Usuarios</button>
         <button type="button" class="sub-tab-btn" data-subtab="config">Marca y ticket</button>
         <button type="button" class="sub-tab-btn" data-subtab="reporte">Reporte</button>
       </div>
@@ -436,17 +439,18 @@
     const reactivateBtn = document.getElementById('reactivateBtn');
     if(reactivateBtn) reactivateBtn.addEventListener('click', ()=> toggleEstatus(negocio, 'activo'));
 
+    let cajerosState = cajerosCliente || [];
     document.querySelectorAll('[data-subtab]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         clienteSubTab = btn.dataset.subtab;
         document.querySelectorAll('[data-subtab]').forEach(b=> b.classList.toggle('active', b.dataset.subtab===clienteSubTab));
-        renderClienteSubContent(negocio, pagos, snap);
+        renderClienteSubContent(negocio, pagos, snap, cajerosState);
       });
     });
-    renderClienteSubContent(negocio, pagos, snap);
+    renderClienteSubContent(negocio, pagos, snap, cajerosState);
   }
 
-  function renderClienteSubContent(negocio, pagos, snap){
+  function renderClienteSubContent(negocio, pagos, snap, cajeros){
     const el = document.getElementById('clienteSubContent');
     if(!el) return;
 
@@ -560,6 +564,82 @@
       const colorLabel = document.getElementById('colorHexLabel');
       colorInput.addEventListener('input', ()=>{ colorLabel.textContent = colorInput.value.toUpperCase(); });
 
+    }else if(clienteSubTab==='usuarios'){
+      el.innerHTML = `
+        <div class="detail-section">
+          <h4>PIN de administrador</h4>
+          <p style="font-size:.85rem; color:var(--ink-soft); margin:0 0 10px;">Es el PIN que el dueño usa dentro de su punto de venta para entrar a Administración. Si no lo recuerda, puedes verlo aquí o ponerle uno nuevo.</p>
+          <div class="pin-reveal-row">
+            <span class="mono" id="pinActualLabel" data-revelado="false">${negocio.admin_pin ? '••••••' : 'Sin PIN configurado todavía'}</span>
+            ${negocio.admin_pin ? `<button type="button" class="link-btn" id="verPinBtn" data-pin="${escapeHTML(negocio.admin_pin)}">Ver</button>` : ''}
+          </div>
+          <div class="form-grid" style="flex-direction:row; gap:10px; align-items:flex-end; margin-top:12px;">
+            <label style="flex:1;">Nuevo PIN (mínimo 4 dígitos)<input id="nuevoPinInput" type="text" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+            <button type="button" class="btn-secondary btn-sm" id="resetPinBtn">Guardar PIN</button>
+          </div>
+        </div>
+        <div class="detail-section">
+          <h4>Cajeros y supervisores</h4>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Nombre</th><th>Código</th><th>Rol</th><th>Acciones</th></tr></thead>
+              <tbody id="usuariosCajerosBody">${cajeros.length ? cajeros.map(c=>`<tr>
+                <td>${escapeHTML(c.nombre)}</td>
+                <td class="mono"><span class="codigo-oculto-admin" data-revelado="false">••••••</span></td>
+                <td>${c.rol==='supervisor' ? '<span class="status-pill status-activo">Supervisor</span>' : 'Cajero'}</td>
+                <td class="row-actions">
+                  <button type="button" class="link-btn" data-ver-codigo="${escapeHTML(c.codigo)}">Ver código</button>
+                  <button type="button" class="link-btn" data-editar-cajero="${c.id}">Editar</button>
+                  <button type="button" class="link-btn" data-eliminar-cajero="${c.id}" data-nombre="${escapeHTML(c.nombre)}">Eliminar</button>
+                </td>
+              </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state">Este negocio no tiene cajeros registrados.</div></td></tr>`}</tbody>
+            </table>
+          </div>
+        </div>`;
+
+      const verPinBtn = document.getElementById('verPinBtn');
+      if(verPinBtn){
+        verPinBtn.addEventListener('click', ()=>{
+          const label = document.getElementById('pinActualLabel');
+          const revelado = label.dataset.revelado==='true';
+          label.textContent = revelado ? '••••••' : verPinBtn.dataset.pin;
+          label.dataset.revelado = revelado ? 'false' : 'true';
+          verPinBtn.textContent = revelado ? 'Ver' : 'Ocultar';
+        });
+      }
+      document.getElementById('resetPinBtn').addEventListener('click', async ()=>{
+        const nuevoPin = document.getElementById('nuevoPinInput').value.trim();
+        if(nuevoPin.length<4){ showToast('El PIN debe tener al menos 4 dígitos.', 'warn'); return; }
+        const { error } = await supabaseClient.from('negocios').update({ admin_pin: nuevoPin }).eq('id', negocio.id);
+        if(error){ showToast('No se pudo actualizar el PIN.', 'error'); return; }
+        negocio.admin_pin = nuevoPin;
+        showToast('PIN actualizado. Avísale al cliente su nuevo PIN.', 'success');
+        renderClienteSubContent(negocio, pagos, snap, cajeros);
+      });
+      el.querySelectorAll('[data-ver-codigo]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const span = btn.closest('tr').querySelector('.codigo-oculto-admin');
+          const revelado = span.dataset.revelado==='true';
+          span.textContent = revelado ? '••••••' : btn.dataset.verCodigo;
+          span.dataset.revelado = revelado ? 'false' : 'true';
+          btn.textContent = revelado ? 'Ver código' : 'Ocultar';
+        });
+      });
+      el.querySelectorAll('[data-editar-cajero]').forEach(btn=>{
+        btn.addEventListener('click', ()=> abrirEditarCajeroModal(negocio, pagos, snap, cajeros, btn.dataset.editarCajero));
+      });
+      el.querySelectorAll('[data-eliminar-cajero]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          if(!confirm(`¿Eliminar a ${btn.dataset.nombre} como cajero de este negocio?`)) return;
+          const { error } = await supabaseClient.from('cajeros').update({ activo:false }).eq('id', btn.dataset.eliminarCajero);
+          if(error){ showToast('No se pudo eliminar.', 'error'); return; }
+          const idx = cajeros.findIndex(c=>c.id===btn.dataset.eliminarCajero);
+          if(idx>-1) cajeros.splice(idx,1);
+          showToast('Cajero eliminado.', 'success');
+          renderClienteSubContent(negocio, pagos, snap, cajeros);
+        });
+      });
+
     }else if(clienteSubTab==='reporte'){
       el.innerHTML = `
         <div class="detail-section">
@@ -586,6 +666,40 @@
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
     XLSX.writeFile(wb, `inventario_${negocio.codigo}_${todayStr()}.xlsx`);
+  }
+
+  function abrirEditarCajeroModal(negocio, pagos, snap, cajeros, cajeroId){
+    const c = cajeros.find(x=>x.id===cajeroId);
+    if(!c) return;
+    openModal('Editar cajero', `
+      <form id="editarCajeroForm" class="form-grid">
+        <label>Nombre*<input required name="nombre" type="text" value="${escapeHTML(c.nombre)}" /></label>
+        <label>Código único*<input required name="codigo" type="text" value="${escapeHTML(c.codigo)}" autocomplete="off" /></label>
+        <label style="flex-direction:row; align-items:center; gap:8px; font-weight:400;">
+          <input type="checkbox" name="supervisor" style="width:auto;" ${c.rol==='supervisor'?'checked':''} />
+          <span>Permisos de supervisor</span>
+        </label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" id="guardarEditarCajeroBtn">Guardar</button>
+    `);
+    document.getElementById('guardarEditarCajeroBtn').addEventListener('click', async ()=>{
+      const form = document.getElementById('editarCajeroForm');
+      const nombre = form.nombre.value.trim();
+      const codigo = form.codigo.value.trim();
+      const rol = form.supervisor.checked ? 'supervisor' : 'cajero';
+      if(!nombre || !codigo){ showToast('Nombre y código son obligatorios.', 'warn'); return; }
+      const { error } = await supabaseClient.from('cajeros').update({ nombre, codigo, rol }).eq('id', c.id);
+      if(error){
+        showToast((error.message||'').includes('duplicate') ? 'Ese código ya está en uso.' : 'No se pudo guardar.', 'error');
+        return;
+      }
+      Object.assign(c, { nombre, codigo, rol });
+      closeModal();
+      showToast('Cajero actualizado.', 'success');
+      renderClienteSubContent(negocio, pagos, snap, cajeros);
+    });
   }
 
   async function toggleEstatus(negocio, nuevoEstatus){
