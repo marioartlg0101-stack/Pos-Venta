@@ -294,12 +294,18 @@
   #folioSearchResults.active{ display:block; }
 
   /* ---------- Printable receipt ---------- */
-  #printReceipt{ display:none; }
+  #printReceipt, #printMovimientos{ display:none; }
   @media print{
     body *{ visibility:hidden; }
-    #printReceipt, #printReceipt *{ visibility:visible; }
+    #printReceipt, #printReceipt *, #printMovimientos, #printMovimientos *{ visibility:visible; }
     #printReceipt{ display:block; position:absolute; top:0; left:0; width:100%; padding:12px; }
+    #printMovimientos{ display:block; position:absolute; top:0; left:0; width:100%; padding:24px; }
   }
+  .reporte-print{ font-family:'Inter',system-ui,sans-serif; color:#000; }
+  .reporte-print h2{ font-size:16px; margin:0 0 4px; }
+  .reporte-print h3{ font-size:14px; margin:0 0 4px; }
+  .reporte-print table{ width:100%; border-collapse:collapse; margin-top:14px; }
+  .reporte-print th, .reporte-print td{ text-align:left; padding:6px 8px; border-bottom:1px solid #ccc; font-size:12px; }
   .ticket{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; max-width:280px; margin:0 auto; color:#000; }
   .ticket h3{ text-align:center; margin:0 0 4px; font-size:14px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
   .ticket p{ margin:2px 0; }
@@ -464,6 +470,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" aria-live="polite"></div>
   <div id="printReceipt"></div>
+  <div id="printMovimientos"></div>
   <div id="blockOverlayRoot"></div>
 
 <script>
@@ -1172,11 +1179,9 @@
       <label for="descuentoInput">Descuento %</label>
       <input id="descuentoInput" type="number" min="0" max="100" step="1" placeholder="0" value="${descuentoPct ? escapeHTML(String(descuentoPct)) : ''}" />
     </div>`;
-    if(Number(descuentoPct)>0){
-      html += `<div class="cart-total-row" style="font-size:.85rem; color:var(--ink-soft);"><span>Subtotal</span><span>${formatMoney(subtotal)}</span></div>`;
-      html += `<div class="cart-total-row" style="font-size:.85rem; color:var(--red);"><span>Descuento (${descuentoPct}%)</span><span>-${formatMoney(subtotal-total)}</span></div>`;
-    }
-    html += `<div class="cart-total-row"><span>Total</span><strong>${formatMoney(total)}</strong></div>`;
+    html += `<div class="cart-total-row" id="subtotalRow" style="font-size:.85rem; color:var(--ink-soft); ${Number(descuentoPct)>0?'':'display:none;'}"><span>Subtotal</span><span id="subtotalValue">${formatMoney(subtotal)}</span></div>`;
+    html += `<div class="cart-total-row" id="descuentoAmountRow" style="font-size:.85rem; color:var(--red); ${Number(descuentoPct)>0?'':'display:none;'}"><span id="descuentoLabel">Descuento (${descuentoPct}%)</span><span id="descuentoValue">-${formatMoney(subtotal-total)}</span></div>`;
+    html += `<div class="cart-total-row"><span>Total</span><strong id="totalValue">${formatMoney(total)}</strong></div>`;
     html += `<div class="method-row">`;
     methods.forEach(m=>{
       html += `<button type="button" class="method-btn ${selectedMethod===m.id?'active':''}" data-action="set-method" data-method="${m.id}">${m.icon}<span>${m.label}</span></button>`;
@@ -1232,9 +1237,31 @@
     if(!input) return;
     const val = input.value;
     descuentoPct = val==='' ? 0 : Math.min(Math.max(Number(val)||0,0),100);
-    renderCartSummary();
-    const el = document.getElementById('descuentoInput');
-    if(el) el.focus();
+    const subtotal = cartTotal();
+    const total = totalConDescuento();
+    const hayDescuento = Number(descuentoPct)>0;
+    const subtotalRow = document.getElementById('subtotalRow');
+    const descuentoRow = document.getElementById('descuentoAmountRow');
+    if(subtotalRow) subtotalRow.style.display = hayDescuento ? '' : 'none';
+    if(descuentoRow) descuentoRow.style.display = hayDescuento ? '' : 'none';
+    const subtotalValue = document.getElementById('subtotalValue');
+    if(subtotalValue) subtotalValue.textContent = formatMoney(subtotal);
+    const descuentoLabel = document.getElementById('descuentoLabel');
+    if(descuentoLabel) descuentoLabel.textContent = `Descuento (${descuentoPct}%)`;
+    const descuentoValue = document.getElementById('descuentoValue');
+    if(descuentoValue) descuentoValue.textContent = '-' + formatMoney(subtotal-total);
+    const totalValue = document.getElementById('totalValue');
+    if(totalValue) totalValue.textContent = formatMoney(total);
+    if(selectedMethod==='efectivo'){ updateChangeDisplay(); }
+    else if(selectedMethod==='mixto'){ updateMixtoDisplay(); }
+    else{
+      const btn = document.querySelector('.btn-cobrar');
+      if(btn){
+        btn.disabled = cart.length===0 || !selectedMethod || facturaEstaIncompleta();
+        const sinTurno = cloudEnabled && !state.turnoActual;
+        btn.textContent = sinTurno ? 'Abre un turno para cobrar' : 'Cobrar'+(cart.length?' '+formatMoney(total):'');
+      }
+    }
   }
   function updateMixtoDisplay(){
     pagoMixtoDraft.efectivo = document.getElementById('mixEfectivo')?.value || '';
@@ -1366,6 +1393,8 @@
     const sale = state.sales.find(s=>s.id===saleId);
     if(!sale){ showToast('No se encontró el ticket.', 'error'); return; }
     if(esReimpresion){ logEvento('reimpresion_ticket', { folio: sale.folio }); }
+    const otro = document.getElementById('printMovimientos');
+    if(otro) otro.innerHTML = '';
     const el = document.getElementById('printReceipt');
     const d = new Date(sale.dateISO);
     const dateStr = d.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
@@ -1680,15 +1709,12 @@
     const s = state.sales.find(x=>x.id===saleId);
     if(!s){ return; }
     if(s.cancelada){ showToast('Esa venta ya está cancelada.', 'warn'); return; }
-    const necesitaPin = !puedeGestionar();
     openModal(`Cancelar venta ${s.folio}`, `
       <p style="font-size:.9rem; color:var(--ink-soft);">Esto restaura la existencia de los productos vendidos. No se puede deshacer.</p>
-      ${necesitaPin ? `
-        <form id="cancelarVentaForm" class="form-grid">
-          <label>PIN de Administración*<input required name="pin" type="password" inputmode="numeric" autocomplete="off" /></label>
-        </form>
-        <p class="error-text" id="cancelarVentaError" style="display:none; color:var(--red); font-size:.85rem; margin-top:8px;"></p>
-      ` : ''}
+      <form id="cancelarVentaForm" class="form-grid">
+        <label>PIN de administrador o código de supervisor*<input required name="clave" type="password" inputmode="numeric" autocomplete="off" /></label>
+      </form>
+      <p class="error-text" id="cancelarVentaError" style="display:none; color:var(--red); font-size:.85rem; margin-top:8px;"></p>
     `, `
       <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
       <button type="button" class="btn-danger" data-action="confirmar-cancelar-venta" data-id="${s.id}">Cancelar venta</button>
@@ -1698,21 +1724,21 @@
   function handleConfirmarCancelarVenta(saleId){
     const s = state.sales.find(x=>x.id===saleId);
     if(!s || s.cancelada) return;
-    if(!puedeGestionar()){
-      const form = document.getElementById('cancelarVentaForm');
-      const pin = form ? form.pin.value.trim() : '';
-      if(!pin || pin !== state.adminPin){
-        const err = document.getElementById('cancelarVentaError');
-        if(err){ err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; }
-        return;
-      }
+    const form = document.getElementById('cancelarVentaForm');
+    const clave = form ? form.clave.value.trim() : '';
+    const esPinAdmin = !!(state.adminPin && clave && clave === state.adminPin);
+    const cajeroSupervisor = state.cajeros.find(c => c.rol==='supervisor' && c.codigo.trim().toLowerCase() === clave.toLowerCase());
+    if(!esPinAdmin && !cajeroSupervisor){
+      const err = document.getElementById('cancelarVentaError');
+      if(err){ err.textContent = 'Código incorrecto.'; err.style.display = 'block'; }
+      return;
     }
+    const canceladaPor = esPinAdmin ? 'Administrador' : cajeroSupervisor.nombre;
     s.items.forEach(item=>{
       const p = state.products.find(x=>x.id===item.productId);
       if(p) p.stock += item.qty;
     });
     s.cancelada = true;
-    const canceladaPor = state.turnoActual ? state.turnoActual.cajeroApertura : 'Administrador';
     const canceladaEn = new Date().toISOString();
     s.canceladaPor = canceladaPor;
     s.canceladaEn = canceladaEn;
@@ -1721,7 +1747,7 @@
     state.pendingCancelaciones.push({ folio: s.folio, cancelada_por: canceladaPor, cancelada_en: canceladaEn });
     saveState();
     flushSync();
-    logEvento('cancelacion_venta', { folio: s.folio, total: s.total });
+    logEvento('cancelacion_venta', { folio: s.folio, total: s.total }, canceladaPor);
     closeModal();
     renderVentas(); renderVenderGrid();
     showToast('Venta cancelada y existencia restaurada.', 'success');
@@ -2140,7 +2166,13 @@
     }catch(e){ showToast('No se pudo conectar. Intenta de nuevo.', 'error'); }
   }
 
+  let movimientosCajeroNombre = '';
+  let movimientosCajeroData = [];
+  let movimientosCajeroFecha = '';
+
   async function abrirMovimientosCajero(nombre){
+    movimientosCajeroNombre = nombre;
+    movimientosCajeroFecha = toDateInputValue(new Date());
     openModal(`Movimientos de ${escapeHTML(nombre)}`, `<p style="color:var(--ink-soft);">Cargando…</p>`, `
       <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
     `);
@@ -2150,10 +2182,10 @@
         supabaseClient.from('turnos').select('*')
           .eq('negocio_id', state.negocioId)
           .or(`cajero_apertura.eq.${nombre},cajero_cierre.eq.${nombre}`)
-          .order('fecha_apertura', {ascending:false}).limit(30),
+          .order('fecha_apertura', {ascending:false}).limit(200),
         supabaseClient.from('eventos_actividad').select('*')
           .eq('negocio_id', state.negocioId).eq('cajero', nombre)
-          .order('created_at', {ascending:false}).limit(50)
+          .order('created_at', {ascending:false}).limit(300)
       ]);
       const body = document.querySelector('.modal-body');
       if(!body) return;
@@ -2164,7 +2196,7 @@
       if(turnosPropios.length){
         const { data: ventasData } = await supabaseClient.from('ventas').select('*')
           .in('turno_id', turnosPropios)
-          .order('fecha_hora', {ascending:false}).limit(100);
+          .order('fecha_hora', {ascending:false}).limit(500);
         ventas = ventasData || [];
       }
 
@@ -2193,16 +2225,58 @@
         else if(e.tipo==='quitar_supervisor'){ linea.push({ fecha: new Date(e.created_at), texto: `Se le quitaron los permisos de supervisor` }); }
       });
       linea.sort((a,b)=> b.fecha - a.fecha);
-      if(!linea.length){ body.innerHTML = `<div class="empty-state">Sin actividad registrada para este cajero.</div>`; return; }
-      body.innerHTML = linea.slice(0,80).map(item=>{
-        const fechaStr = item.fecha.toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
-        return `<div class="corte-detalle-row"><span>${fechaStr}</span><span>${escapeHTML(item.texto)}</span></div>`;
-      }).join('');
+      movimientosCajeroData = linea;
+      renderMovimientosDia();
     }catch(e){
       const body = document.querySelector('.modal-body');
       if(body) body.innerHTML = `<p class="error-text">No se pudo conectar. Intenta de nuevo.</p>`;
     }
   }
+
+  function renderMovimientosDia(){
+    const body = document.querySelector('.modal-body');
+    if(!body) return;
+    const delDia = movimientosCajeroData.filter(item => toDateInputValue(item.fecha) === movimientosCajeroFecha);
+    body.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+        <input id="movimientosDateInput" type="date" aria-label="Fecha" value="${movimientosCajeroFecha}" />
+        <button type="button" class="btn-secondary btn-sm" id="exportarMovimientosBtn" ${delDia.length?'':'disabled'}>Exportar PDF de este día</button>
+      </div>
+      <div id="movimientosListaDia">
+        ${delDia.length ? delDia.map(item=>{
+          const horaStr = item.fecha.toLocaleTimeString('es-MX',{hour:'2-digit', minute:'2-digit'});
+          return `<div class="corte-detalle-row"><span>${horaStr}</span><span>${escapeHTML(item.texto)}</span></div>`;
+        }).join('') : '<div class="empty-state">Sin actividad este día.</div>'}
+      </div>
+    `;
+    document.getElementById('movimientosDateInput').addEventListener('change', (e)=>{
+      movimientosCajeroFecha = e.target.value;
+      renderMovimientosDia();
+    });
+    const exportBtn = document.getElementById('exportarMovimientosBtn');
+    if(exportBtn) exportBtn.addEventListener('click', ()=> exportarMovimientosPDF(delDia));
+  }
+
+  function exportarMovimientosPDF(items){
+    const el = document.getElementById('printMovimientos');
+    if(!el || !items.length) return;
+    const otro = document.getElementById('printReceipt');
+    if(otro) otro.innerHTML = '';
+    const fechaLegible = new Date(movimientosCajeroFecha+'T00:00:00').toLocaleDateString('es-MX', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    el.innerHTML = `
+      <div class="reporte-print">
+        <h2>${escapeHTML(state.businessName)}</h2>
+        <h3>Movimientos de ${escapeHTML(movimientosCajeroNombre)}</h3>
+        <p style="text-transform:capitalize;">${fechaLegible}</p>
+        <table>
+          <thead><tr><th>Hora</th><th>Movimiento</th></tr></thead>
+          <tbody>${items.map(item=>`<tr><td>${item.fecha.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</td><td>${escapeHTML(item.texto)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    `;
+    window.print();
+  }
+
 
   async function handleSaveAdminPin(){
     const form = document.getElementById('setupPinForm') || document.getElementById('changePinForm');
