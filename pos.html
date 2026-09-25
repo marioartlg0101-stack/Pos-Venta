@@ -242,6 +242,10 @@
   /* ---------- Caja / turnos ---------- */
   .turno-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:22px; box-shadow:var(--shadow); }
   .excel-import-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .admin-subnav{ display:flex; gap:6px; margin-top:16px; border-bottom:1px solid var(--line); }
+  .sub-tab-btn{ padding:10px 16px; border:none; background:transparent; color:var(--ink-soft); font-weight:600; font-size:.9rem; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .sub-tab-btn.active{ color:var(--green-700); border-bottom-color:var(--green-600); }
+  .sub-tab-btn:hover:not(.active){ color:var(--ink); }
   .turno-card.abierto{ border-color:var(--green-500); }
   .turno-card h3{ font-size:1.05rem; margin-bottom:10px; }
   .turno-info-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:16px; }
@@ -1735,6 +1739,7 @@
 
   // ---------- Administración (PIN del dueño + cajeros) ----------
   let adminDesbloqueado = false;
+  let adminSubTab = 'inventario';
 
   function renderAdministracion(){
     const area = document.getElementById('adminArea');
@@ -1770,51 +1775,62 @@
     }
     area.innerHTML = `
       <div class="panel-header">
-        <div><h2 style="font-size:1.1rem;">Inventario (edición completa)</h2></div>
-        <div class="panel-actions">
-          <button type="button" class="btn-ghost btn-sm" data-action="lock-admin">Bloquear</button>
-        </div>
+        <div><h2 style="font-size:1.1rem;">Administración</h2></div>
+        <button type="button" class="btn-ghost btn-sm" data-action="lock-admin">Bloquear</button>
       </div>
-      <p style="color:var(--ink-soft); font-size:.85rem; margin:0 0 14px;">Aquí sí puedes editar o eliminar productos — en la pestaña Inventario normal solo se puede agregar y recibir mercancía.</p>
-      <div class="excel-import-row">
-        <label class="btn-secondary btn-sm" style="cursor:pointer;">Cargar Excel
-          <input type="file" id="excelInventarioInput" accept=".xlsx,.xls,.csv" style="display:none;" />
-        </label>
-        <button type="button" class="link-btn" data-action="descargar-plantilla-excel">Descargar plantilla</button>
+      <div class="admin-subnav">
+        <button type="button" class="sub-tab-btn ${adminSubTab==='inventario'?'active':''}" data-action="admin-subtab" data-sub="inventario">Inventario</button>
+        <button type="button" class="sub-tab-btn ${adminSubTab==='cajeros'?'active':''}" data-action="admin-subtab" data-sub="cajeros">Cajeros</button>
+        <button type="button" class="sub-tab-btn ${adminSubTab==='pin'?'active':''}" data-action="admin-subtab" data-sub="pin">PIN</button>
       </div>
-      <div class="table-scroll" style="margin-top:14px;">
-        <table class="data-table">
-          <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th><th>Acciones</th></tr></thead>
-          <tbody id="inventarioAdminTableBody"></tbody>
-        </table>
-      </div>
+      <div id="adminSubContent"></div>
+    `;
+    renderAdminSubContent();
+  }
 
-      <div class="panel-header" style="margin-top:28px;">
-        <div><h2 style="font-size:1.1rem;">Cajeros</h2></div>
-        <div class="panel-actions">
+  function renderAdminSubContent(){
+    const el = document.getElementById('adminSubContent');
+    if(!el) return;
+    if(adminSubTab==='inventario'){
+      el.innerHTML = `
+        <p style="color:var(--ink-soft); font-size:.85rem; margin:14px 0;">Aquí sí puedes editar o eliminar productos — en la pestaña Inventario normal solo se puede agregar y recibir mercancía.</p>
+        <div class="excel-import-row">
+          <label class="btn-secondary btn-sm" style="cursor:pointer;">Cargar Excel
+            <input type="file" id="excelInventarioInput" accept=".xlsx,.xls,.csv" style="display:none;" />
+          </label>
+          <button type="button" class="link-btn" data-action="descargar-plantilla-excel">Descargar plantilla</button>
+        </div>
+        <div class="table-scroll" style="margin-top:14px;">
+          <table class="data-table">
+            <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th>Precio</th><th>Existencia</th><th>Acciones</th></tr></thead>
+            <tbody id="inventarioAdminTableBody"></tbody>
+          </table>
+        </div>`;
+      renderInventarioAdminList();
+      const excelInput = document.getElementById('excelInventarioInput');
+      if(excelInput){ excelInput.addEventListener('change', handleCargarExcel); }
+    }else if(adminSubTab==='cajeros'){
+      el.innerHTML = `
+        <div class="panel-header" style="margin-top:14px;">
+          <div></div>
           <button type="button" class="btn-primary btn-sm" data-action="open-add-cajero">Agregar cajero</button>
         </div>
-      </div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>Nombre</th><th>Código</th><th>Acciones</th></tr></thead>
-          <tbody id="cajerosAdminTableBody"></tbody>
-        </table>
-      </div>
-      <div class="panel-header" style="margin-top:28px;">
-        <div><h2 style="font-size:1.1rem;">Cambiar tu PIN</h2></div>
-      </div>
-      <form id="changePinForm" class="form-grid" style="max-width:320px;">
-        <label>Nuevo PIN (mínimo 4 dígitos)<input required name="pin" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
-        <label>Confirma el nuevo PIN<input required name="pin2" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
-        <button type="button" class="btn-secondary btn-sm" data-action="save-admin-pin" style="align-self:flex-start;">Guardar nuevo PIN</button>
-      </form>
-    `;
-    renderInventarioAdminList();
-    renderCajerosAdminList();
-    refrescarCajeros();
-    const excelInput = document.getElementById('excelInventarioInput');
-    if(excelInput){ excelInput.addEventListener('change', handleCargarExcel); }
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Nombre</th><th>Código</th><th>Acciones</th></tr></thead>
+            <tbody id="cajerosAdminTableBody"></tbody>
+          </table>
+        </div>`;
+      renderCajerosAdminList();
+      refrescarCajeros();
+    }else if(adminSubTab==='pin'){
+      el.innerHTML = `
+        <form id="changePinForm" class="form-grid" style="max-width:320px; margin-top:14px;">
+          <label>Nuevo PIN (mínimo 4 dígitos)<input required name="pin" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+          <label>Confirma el nuevo PIN<input required name="pin2" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+          <button type="button" class="btn-secondary btn-sm" data-action="save-admin-pin" style="align-self:flex-start;">Guardar nuevo PIN</button>
+        </form>`;
+    }
   }
 
   function renderInventarioAdminList(){
@@ -1971,8 +1987,42 @@
     tbody.innerHTML = state.cajeros.map(c=>`<tr>
       <td>${escapeHTML(c.nombre)}</td>
       <td class="mono"><span class="codigo-oculto" data-revelado="false">••••••</span></td>
-      <td><button type="button" class="link-btn" data-action="toggle-codigo-cajero" data-codigo="${escapeHTML(c.codigo)}">Ver</button></td>
+      <td class="row-actions">
+        <button type="button" class="link-btn" data-action="toggle-codigo-cajero" data-codigo="${escapeHTML(c.codigo)}">Ver código</button>
+        <button type="button" class="link-btn" data-action="ver-movimientos-cajero" data-nombre="${escapeHTML(c.nombre)}">Ver movimientos</button>
+      </td>
     </tr>`).join('');
+  }
+
+  async function abrirMovimientosCajero(nombre){
+    openModal(`Movimientos de ${escapeHTML(nombre)}`, `<p style="color:var(--ink-soft);">Cargando…</p>`, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
+    `);
+    if(!cloudEnabled || !state.negocioId) return;
+    try{
+      const { data, error } = await supabaseClient.from('turnos').select('*')
+        .eq('negocio_id', state.negocioId)
+        .or(`cajero_apertura.eq.${nombre},cajero_cierre.eq.${nombre}`)
+        .order('fecha_apertura', {ascending:false})
+        .limit(30);
+      const body = document.querySelector('.modal-body');
+      if(!body) return;
+      if(error){ body.innerHTML = `<p class="error-text">No se pudo cargar: ${escapeHTML(error.message||'')}</p>`; return; }
+      if(!data || !data.length){ body.innerHTML = `<div class="empty-state">Sin turnos registrados para este cajero.</div>`; return; }
+      body.innerHTML = data.map(t=>{
+        const apertura = new Date(t.fecha_apertura).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'});
+        const cierre = t.fecha_cierre ? new Date(t.fecha_cierre).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : 'Sigue abierto';
+        const roles = [];
+        if(t.cajero_apertura===nombre) roles.push('Abrió');
+        if(t.cajero_cierre===nombre) roles.push('Cerró');
+        const dif = (t.diferencia!==null && t.diferencia!==undefined) ? Number(t.diferencia) : null;
+        const difLabel = dif===null ? '—' : (Math.abs(dif)<0.01 ? 'Cuadra' : (dif<0 ? 'Faltante '+formatMoney(Math.abs(dif)) : 'Excedente '+formatMoney(dif)));
+        return `<div class="corte-detalle-row"><span>${apertura} → ${escapeHTML(cierre)}</span><span>${roles.join(' / ')} · ${difLabel}</span></div>`;
+      }).join('');
+    }catch(e){
+      const body = document.querySelector('.modal-body');
+      if(body) body.innerHTML = `<p class="error-text">No se pudo conectar. Intenta de nuevo.</p>`;
+    }
   }
 
   async function handleSaveAdminPin(){
@@ -2229,6 +2279,8 @@
       }
       case 'descargar-plantilla-excel': descargarPlantillaExcel(); break;
       case 'confirmar-modo-excel': handleConfirmarModoExcel(); break;
+      case 'admin-subtab': adminSubTab = btn.dataset.sub; renderAdministracion(); break;
+      case 'ver-movimientos-cajero': abrirMovimientosCajero(btn.dataset.nombre); break;
     }
   });
 
