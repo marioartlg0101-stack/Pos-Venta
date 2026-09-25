@@ -1869,22 +1869,54 @@
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
     XLSX.writeFile(wb, 'plantilla_inventario.xlsx');
   }
-  async function handleCargarExcel(e){
+  let excelFilePendiente = null;
+  function handleCargarExcel(e){
     const file = e.target.files[0];
+    e.target.value = '';
     if(!file) return;
-    if(bloqueadoPorSuspension()){ e.target.value=''; return; }
-    if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el lector de Excel.', 'error'); e.target.value=''; return; }
+    if(bloqueadoPorSuspension()) return;
+    excelFilePendiente = file;
+    openModal('¿Cómo cargar este Excel?', `
+      <p style="font-size:.88rem; color:var(--ink-soft); margin-bottom:14px;">Para los productos cuyo SKU ya existe en tu sistema, ¿qué quieres hacer con la existencia?</p>
+      <div class="form-grid">
+        <label style="flex-direction:row; align-items:flex-start; gap:8px; font-weight:400; color:var(--ink);">
+          <input type="radio" name="modoExcel" value="sumar" checked style="margin-top:3px;" />
+          <span><strong>Sumar</strong> la cantidad del Excel a la que ya tiene — para una entrega/mercancía nueva que llegó.</span>
+        </label>
+        <label style="flex-direction:row; align-items:flex-start; gap:8px; font-weight:400; color:var(--ink);">
+          <input type="radio" name="modoExcel" value="reemplazar" style="margin-top:3px;" />
+          <span><strong>Reemplazar</strong> la existencia con la del Excel — para corregir o actualizar tu inventario completo.</span>
+        </label>
+      </div>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="confirmar-modo-excel">Continuar</button>
+    `);
+  }
+
+  async function handleConfirmarModoExcel(){
+    const seleccion = document.querySelector('input[name="modoExcel"]:checked');
+    const modo = seleccion ? seleccion.value : 'sumar';
+    closeModal();
+    const file = excelFilePendiente;
+    excelFilePendiente = null;
+    if(!file) return;
+    await procesarArchivoExcel(file, modo);
+  }
+
+  async function procesarArchivoExcel(file, modo){
+    if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el lector de Excel.', 'error'); return; }
     try{
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data, {type:'array'});
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
-      if(!rows.length){ showToast('El archivo está vacío.', 'warn'); e.target.value=''; return; }
+      if(!rows.length){ showToast('El archivo está vacío.', 'warn'); return; }
       const headers = rows[0];
       const map = mapaColumnasExcel(headers);
       if(map.nombre===undefined || map.precio===undefined || map.existencia===undefined){
         showToast('El Excel debe tener al menos columnas de Nombre, Precio y Existencia. Descarga la plantilla si no estás seguro del formato.', 'error');
-        e.target.value=''; return;
+        return;
       }
       let creados = 0, actualizados = 0, omitidos = 0;
       for(let i=1; i<rows.length; i++){
@@ -1892,19 +1924,30 @@
         if(!row || row.every(c=> c==='' || c===undefined)) continue;
         const nombre = String(row[map.nombre]||'').trim();
         const precio = Number(row[map.precio]);
-        const existencia = Number(row[map.existencia]);
-        if(!nombre || isNaN(precio) || isNaN(existencia)){ omitidos++; continue; }
+        const cantidadExcel = Number(row[map.existencia]);
+        if(!nombre || isNaN(precio) || isNaN(cantidadExcel)){ omitidos++; continue; }
         const categoria = map.categoria!==undefined ? String(row[map.categoria]||'').trim() : '';
         const sku = map.sku!==undefined ? String(row[map.sku]||'').trim() : '';
         const costo = map.costo!==undefined ? (Number(row[map.costo])||0) : 0;
-        const minimo = (map.minimo!==undefined && row[map.minimo]!=='') ? Number(row[map.minimo]) : 5;
+        const minimoProvisto = (map.minimo!==undefined && row[map.minimo]!=='') ? Number(row[map.minimo]) : null;
         const existente = sku ? state.products.find(p => (p.sku||'').trim().toLowerCase() === sku.toLowerCase()) : null;
         if(existente){
-          Object.assign(existente, { name:nombre, category: categoria||existente.category, sku, price:precio, cost:costo, stock:existencia, minStock:minimo });
+          const nuevoStock = modo==='sumar' ? (Number(existente.stock)||0) + cantidadExcel : cantidadExcel;
+          Object.assign(existente, {
+            name:nombre, category: categoria||existente.category, sku, price:precio, cost:costo,
+            stock:nuevoStock, minStock: minimoProvisto!==null ? minimoProvisto : existente.minStock
+          });
           actualizados++;
+          if(modo==='sumar' && cantidadExcel>0){
+            queueMovimiento({ producto_id: existente.id, producto_nombre: existente.name, cantidad: cantidadExcel, costo_unitario: costo });
+          }
         }else{
-          state.products.push({ id: uid('p_'), name:nombre, category: categoria||'General', sku, price:precio, cost:costo, stock:existencia, minStock:minimo });
+          const nuevo = { id: uid('p_'), name:nombre, category: categoria||'General', sku, price:precio, cost:costo, stock:cantidadExcel, minStock: minimoProvisto!==null ? minimoProvisto : 5 };
+          state.products.push(nuevo);
           creados++;
+          if(cantidadExcel>0){
+            queueMovimiento({ producto_id: nuevo.id, producto_nombre: nuevo.name, cantidad: cantidadExcel, costo_unitario: costo });
+          }
         }
       }
       saveState();
@@ -1916,7 +1959,6 @@
     }catch(err){
       showToast('No se pudo leer el archivo: ' + (err.message||'formato no reconocido'), 'error');
     }
-    e.target.value = '';
   }
 
   function renderCajerosAdminList(){
@@ -2186,6 +2228,7 @@
         break;
       }
       case 'descargar-plantilla-excel': descargarPlantillaExcel(); break;
+      case 'confirmar-modo-excel': handleConfirmarModoExcel(); break;
     }
   });
 
