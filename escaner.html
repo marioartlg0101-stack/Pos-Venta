@@ -135,7 +135,7 @@
           <p class="sub">Captura el código de tu negocio y tu código de cajero para empezar a escanear.</p>
           <form id="vinculoForm" class="form-grid">
             <label>Código de negocio<input required name="negocio" type="text" autocomplete="off" /></label>
-            <label>Código de cajero<input required name="cajero" type="text" autocomplete="off" /></label>
+            <label>Código de cajero<input required name="cajero" type="password" inputmode="numeric" autocomplete="off" /></label>
             <button type="submit" class="btn-primary">Entrar</button>
           </form>
           ${errorMsg ? `<p class="error-text">${escapeHTML(errorMsg)}</p>` : ''}
@@ -181,10 +181,45 @@
       negocio = negocioData;
       cajero = cajeroMatch;
       turno = turnoData;
+      guardarSesionEscaner();
       iniciarEscaneo();
     }catch(e){
       renderVinculo('No se pudo conectar. Revisa tu internet e intenta de nuevo.');
     }
+  }
+
+  // -------------------------------------------------- Persistencia de sesión
+  // Se guarda hasta que el turno se cierre (no cada vez que se cierra el link),
+  // pensado para cuando esto se empaquete como aplicación.
+  function guardarSesionEscaner(){
+    try{
+      localStorage.setItem('escanerSesion', JSON.stringify({ negocio, cajero, turno }));
+    }catch(e){ /* almacenamiento no disponible: se ignora */ }
+  }
+  function cargarSesionEscaner(){
+    try{
+      const raw = localStorage.getItem('escanerSesion');
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+  function borrarSesionEscaner(){
+    try{ localStorage.removeItem('escanerSesion'); }catch(e){ /* se ignora */ }
+  }
+  async function reanudarSesionGuardada(){
+    const sesion = cargarSesionEscaner();
+    if(!sesion || !sesion.negocio || !sesion.cajero || !sesion.turno) return false;
+    try{
+      const { data } = await supabaseClient.from('turnos').select('*').eq('id', sesion.turno.id).maybeSingle();
+      if(data && data.estado === 'abierto'){
+        negocio = sesion.negocio;
+        cajero = sesion.cajero;
+        turno = data;
+        iniciarEscaneo();
+        return true;
+      }
+    }catch(e){ /* sin conexión: se intentará más tarde con el flujo normal */ }
+    borrarSesionEscaner();
+    return false;
   }
 
   // ------------------------------------------------------------- Pantalla 2
@@ -206,7 +241,14 @@
       </div>`;
     document.getElementById('salirBtn').addEventListener('click', salir);
     const triggerBtn = document.getElementById('triggerBtn');
-    const activarDisparador = (e)=>{ e.preventDefault(); disparadorActivo = true; triggerBtn.classList.add('activo'); scannerLoop(); };
+    const activarDisparador = (e)=>{
+      e.preventDefault();
+      try{
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+      }catch(err){ /* audio no disponible: se ignora */ }
+      disparadorActivo = true; triggerBtn.classList.add('activo'); scannerLoop();
+    };
     const desactivarDisparador = ()=>{ disparadorActivo = false; triggerBtn.classList.remove('activo'); };
     triggerBtn.addEventListener('pointerdown', activarDisparador);
     triggerBtn.addEventListener('pointerup', desactivarDisparador);
@@ -315,6 +357,7 @@
       const { data } = await supabaseClient.from('turnos').select('estado').eq('id', turno.id).maybeSingle();
       if(!data || data.estado !== 'abierto'){
         detenerCamara();
+        borrarSesionEscaner();
         document.getElementById('app').innerHTML = `
           <div class="block-overlay"><div class="card">
             <h1>Turno cerrado</h1>
@@ -335,15 +378,16 @@
 
   function salir(){
     detenerCamara();
+    borrarSesionEscaner();
     negocio = null; cajero = null; turno = null;
     renderVinculo();
   }
 
-  if(esNavegadorEnApp()){
-    renderAbrirEnChrome();
-  }else{
-    renderVinculo();
-  }
+  (async function boot(){
+    if(esNavegadorEnApp()){ renderAbrirEnChrome(); return; }
+    const reanudo = await reanudarSesionGuardada();
+    if(!reanudo){ renderVinculo(); }
+  })();
 </script>
 </body>
 </html>

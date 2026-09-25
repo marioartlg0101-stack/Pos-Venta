@@ -328,6 +328,10 @@
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="12" cy="14.5" r="2"/></svg>
         <span>Caja</span>
       </button>
+      <button type="button" class="tab-btn" data-action="switch-tab" data-tab="administracion" role="tab" aria-selected="false">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9.5 12l1.8 1.8L14.5 10"/></svg>
+        <span>Administración</span>
+      </button>
     </nav>
   </header>
 
@@ -411,17 +415,6 @@
       <div id="turnoEstadoArea"></div>
 
       <div class="panel-header" style="margin-top:28px;">
-        <div><h2 style="font-size:1.1rem;">Cajeros</h2></div>
-        <button type="button" class="btn-secondary btn-sm" data-action="open-add-cajero">Agregar cajero</button>
-      </div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>Nombre</th><th>Código</th></tr></thead>
-          <tbody id="cajerosTableBody"></tbody>
-        </table>
-      </div>
-
-      <div class="panel-header" style="margin-top:28px;">
         <div><h2 style="font-size:1.1rem;">Turnos recientes</h2></div>
       </div>
       <div class="table-scroll">
@@ -430,6 +423,17 @@
           <tbody id="turnosTableBody"><tr><td colspan="5"><div class="empty-state">Cargando…</div></td></tr></tbody>
         </table>
       </div>
+    </section>
+
+    <!-- ADMINISTRACIÓN -->
+    <section id="panel-administracion" class="panel" role="tabpanel">
+      <div class="panel-header">
+        <div>
+          <h2>Administración</h2>
+          <p class="panel-subtitle">Solo para el dueño del negocio: crea cajeros y controla el acceso con tu PIN.</p>
+        </div>
+      </div>
+      <div id="adminArea"></div>
     </section>
 
   </main>
@@ -452,7 +456,7 @@
     return {
       businessName:'Mi Negocio', products:[], sales:[], nextFolio:1,
       negocioId:null, negocioCodigo:null, estatusCache:'activo',
-      negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false, colorPrimario:'', facturacionHabilitada:false,
+      negocioDireccion:'', negocioTelefono:'', negocioLogoUrl:'', mostrarDatosTicket:false, colorPrimario:'', facturacionHabilitada:false, adminPin:'',
       turnoActual:null, cajeros:[],
       pendingVentas:[], pendingMovimientos:[], snapshotDirty:false
     };
@@ -546,7 +550,7 @@
     try{
       const { data, error } = await supabaseClient
         .from('negocios_estatus_publico')
-        .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
+        .select('id, codigo, estatus, nombre_negocio, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada, admin_pin')
         .ilike('codigo', codigo)
         .maybeSingle();
       if(error){
@@ -584,6 +588,7 @@
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       state.colorPrimario = data.color_primario || '';
       state.facturacionHabilitada = !!data.facturacion_habilitada;
+      state.adminPin = data.admin_pin || '';
       if(data.nombre_negocio){ state.businessName = data.nombre_negocio; }
       saveState();
 
@@ -684,7 +689,7 @@
     try{
       const { data, error } = await supabaseClient
         .from('negocios_estatus_publico')
-        .select('estatus, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada')
+        .select('estatus, direccion, telefono, logo_url, mostrar_datos_ticket, color_primario, facturacion_habilitada, admin_pin')
         .eq('id', state.negocioId)
         .maybeSingle();
       if(error) return; // error real de conexión/permiso: no bloquear, se reintenta después
@@ -703,6 +708,7 @@
       state.mostrarDatosTicket = !!data.mostrar_datos_ticket;
       state.colorPrimario = data.color_primario || '';
       state.facturacionHabilitada = !!data.facturacion_habilitada;
+      state.adminPin = data.admin_pin || '';
       saveState();
       applyBrandLogo();
       aplicarColorMarca(state.colorPrimario);
@@ -1238,8 +1244,57 @@
       ${(sale.method==='efectivo'||sale.method==='mixto') && sale.change>0 ? `<p>Cambio a entregar: <strong>${formatMoney(sale.change)}</strong></p>` : ''}
     `, `
       <button type="button" class="btn-ghost" data-action="close-modal">Cerrar</button>
+      <button type="button" class="btn-secondary" data-action="open-whatsapp-ticket" data-id="${sale.id}">Enviar por WhatsApp</button>
       <button type="button" class="btn-primary" data-action="print-ticket" data-id="${sale.id}">Imprimir ticket</button>
     `);
+  }
+
+  function construirTextoTicket(sale){
+    const d = new Date(sale.dateISO);
+    const dateStr = d.toLocaleDateString('es-MX', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const timeStr = d.toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+    const mostrarExtra = cloudEnabled && state.mostrarDatosTicket;
+    const lineas = [];
+    lineas.push('*' + state.businessName + '*');
+    if(mostrarExtra && state.negocioDireccion) lineas.push(state.negocioDireccion);
+    if(mostrarExtra && state.negocioTelefono) lineas.push('Tel: ' + state.negocioTelefono);
+    lineas.push(dateStr + ' · ' + timeStr);
+    lineas.push('Ticket No.: ' + sale.folio);
+    lineas.push('');
+    sale.items.forEach(i=>{ lineas.push(i.qty + 'x ' + i.name + ' - ' + formatMoney(i.price*i.qty)); });
+    lineas.push('');
+    lineas.push('*Total: ' + formatMoney(sale.total) + '*');
+    lineas.push('Método: ' + methodDisplay(sale));
+    if(sale.method==='efectivo'){ lineas.push('Recibido: ' + formatMoney(sale.received) + ' · Cambio: ' + formatMoney(sale.change)); }
+    if(sale.method==='mixto' && sale.change>0){ lineas.push('Cambio: ' + formatMoney(sale.change)); }
+    if(sale.requiereFactura){ lineas.push('Factura solicitada' + (sale.datosFiscales && sale.datosFiscales.rfc ? ' · RFC: '+sale.datosFiscales.rfc : '')); }
+    lineas.push('');
+    lineas.push('¡Gracias por su compra!');
+    return lineas.join('\n');
+  }
+
+  function openWhatsappTicketModal(saleId){
+    const sale = state.sales.find(s=>s.id===saleId);
+    if(!sale){ showToast('No se encontró el ticket.', 'error'); return; }
+    openModal('Enviar ticket por WhatsApp', `
+      <form id="whatsappForm" class="form-grid">
+        <label>Teléfono del cliente (con código de país, solo dígitos)<input required name="telefono" type="tel" placeholder="Ej. 529671234567" /></label>
+      </form>
+    `, `
+      <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
+      <button type="button" class="btn-primary" data-action="confirm-send-whatsapp" data-id="${saleId}">Enviar</button>
+    `);
+  }
+  function handleConfirmSendWhatsapp(saleId){
+    const form = document.getElementById('whatsappForm');
+    const telefono = form.telefono.value.replace(/\D/g,'');
+    if(!telefono){ showToast('Ingresa un teléfono válido.', 'warn'); return; }
+    const sale = state.sales.find(s=>s.id===saleId);
+    if(!sale){ showToast('No se encontró el ticket.', 'error'); return; }
+    const texto = construirTextoTicket(sale);
+    const url = 'https://wa.me/' + telefono + '?text=' + encodeURIComponent(texto);
+    window.open(url, '_blank');
+    closeModal();
   }
 
   function printReceipt(saleId){
@@ -1502,7 +1557,7 @@
         <td>${itemsSummary}</td>
         <td>${methodDisplay(s)}</td>
         <td class="num">${formatMoney(s.total)}</td>
-        <td><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button></td>
+        <td class="row-actions"><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button><button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button></td>
       </tr>`;
     }).join('');
   }
@@ -1525,7 +1580,7 @@
         return `<tr>
           <td>${dateStr}</td><td>${timeStr}</td><td class="mono">${s.folio}</td><td>${methodDisplay(s)}</td>
           <td class="num">${formatMoney(s.total)}</td>
-          <td><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button></td>
+          <td class="row-actions"><button type="button" class="link-btn" data-action="print-ticket" data-id="${s.id}">Imprimir</button><button type="button" class="link-btn" data-action="open-whatsapp-ticket" data-id="${s.id}">WhatsApp</button></td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
@@ -1622,23 +1677,13 @@
       </div>`;
   }
 
-  function renderCajerosList(){
-    const tbody = document.getElementById('cajerosTableBody');
-    if(!tbody) return;
-    if(!state.cajeros.length){
-      tbody.innerHTML = `<tr><td colspan="2"><div class="empty-state">Aún no tienes cajeros registrados.</div></td></tr>`;
-      return;
-    }
-    tbody.innerHTML = state.cajeros.map(c=>`<tr><td>${escapeHTML(c.nombre)}</td><td class="mono">${escapeHTML(c.codigo)}</td></tr>`).join('');
-  }
-
   async function refrescarCajeros(){
     if(!cloudEnabled || !state.negocioId) return;
     try{
       const { data } = await supabaseClient.from('cajeros').select('*').eq('negocio_id', state.negocioId).eq('activo', true);
       state.cajeros = data || [];
       saveState();
-      renderCajerosList();
+      renderCajerosAdminList();
     }catch(e){ /* usa lo que ya tenía en caché */ }
   }
 
@@ -1672,9 +1717,117 @@
 
   function renderCaja(){
     renderTurnoEstado();
-    renderCajerosList();
     refrescarCajeros();
     cargarTurnosRecientes();
+  }
+
+  // ---------- Administración (PIN del dueño + cajeros) ----------
+  let adminDesbloqueado = false;
+
+  function renderAdministracion(){
+    const area = document.getElementById('adminArea');
+    if(!area) return;
+    if(!cloudEnabled){
+      area.innerHTML = `<div class="empty-state"><p>La administración necesita estar conectado a la nube.</p></div>`;
+      return;
+    }
+    if(!adminDesbloqueado){
+      if(!state.adminPin){
+        area.innerHTML = `
+          <div class="turno-card">
+            <h3>Configura tu PIN de administrador</h3>
+            <p style="color:var(--ink-soft); font-size:.9rem; margin-bottom:16px;">Este PIN es tuyo, del dueño del negocio. Solo quien lo conozca podrá dar de alta nuevos cajeros.</p>
+            <form id="setupPinForm" class="form-grid">
+              <label>Crea tu PIN (mínimo 4 dígitos)<input required name="pin" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+              <label>Confirma tu PIN<input required name="pin2" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+              <button type="button" class="btn-primary" data-action="save-admin-pin">Guardar PIN</button>
+            </form>
+          </div>`;
+      }else{
+        area.innerHTML = `
+          <div class="turno-card">
+            <h3>Acceso de administrador</h3>
+            <p style="color:var(--ink-soft); font-size:.9rem; margin-bottom:16px;">Ingresa tu PIN para gestionar cajeros.</p>
+            <form id="adminLoginForm" class="form-grid">
+              <label>PIN<input required name="pin" type="password" inputmode="numeric" autocomplete="off" /></label>
+              <button type="button" class="btn-primary" data-action="unlock-admin">Entrar</button>
+            </form>
+          </div>`;
+      }
+      return;
+    }
+    area.innerHTML = `
+      <div class="panel-header">
+        <div><h2 style="font-size:1.1rem;">Cajeros</h2></div>
+        <div class="panel-actions">
+          <button type="button" class="btn-ghost btn-sm" data-action="lock-admin">Bloquear</button>
+          <button type="button" class="btn-primary btn-sm" data-action="open-add-cajero">Agregar cajero</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Nombre</th><th>Código</th><th>Acciones</th></tr></thead>
+          <tbody id="cajerosAdminTableBody"></tbody>
+        </table>
+      </div>
+      <div class="panel-header" style="margin-top:28px;">
+        <div><h2 style="font-size:1.1rem;">Cambiar tu PIN</h2></div>
+      </div>
+      <form id="changePinForm" class="form-grid" style="max-width:320px;">
+        <label>Nuevo PIN (mínimo 4 dígitos)<input required name="pin" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+        <label>Confirma el nuevo PIN<input required name="pin2" type="password" inputmode="numeric" minlength="4" autocomplete="off" /></label>
+        <button type="button" class="btn-secondary btn-sm" data-action="save-admin-pin" style="align-self:flex-start;">Guardar nuevo PIN</button>
+      </form>
+    `;
+    renderCajerosAdminList();
+    refrescarCajeros();
+  }
+
+  function renderCajerosAdminList(){
+    const tbody = document.getElementById('cajerosAdminTableBody');
+    if(!tbody) return;
+    if(!state.cajeros.length){
+      tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state">Aún no tienes cajeros registrados.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = state.cajeros.map(c=>`<tr>
+      <td>${escapeHTML(c.nombre)}</td>
+      <td class="mono"><span class="codigo-oculto" data-revelado="false">••••••</span></td>
+      <td><button type="button" class="link-btn" data-action="toggle-codigo-cajero" data-codigo="${escapeHTML(c.codigo)}">Ver</button></td>
+    </tr>`).join('');
+  }
+
+  async function handleSaveAdminPin(){
+    const form = document.getElementById('setupPinForm') || document.getElementById('changePinForm');
+    if(!form) return;
+    const pin = form.pin.value.trim();
+    const pin2 = form.pin2.value.trim();
+    if(pin.length < 4){ showToast('El PIN debe tener al menos 4 dígitos.', 'warn'); return; }
+    if(pin !== pin2){ showToast('Los dos PIN no coinciden.', 'warn'); return; }
+    try{
+      const { error } = await supabaseClient.from('negocios_estatus_publico').update({ admin_pin: pin }).eq('id', state.negocioId);
+      if(error){ showToast('No se pudo guardar el PIN.', 'error'); return; }
+      state.adminPin = pin;
+      saveState();
+      adminDesbloqueado = true;
+      showToast('PIN guardado.', 'success');
+      renderAdministracion();
+    }catch(e){ showToast('No se pudo conectar. Intenta de nuevo.', 'error'); }
+  }
+  function handleUnlockAdmin(){
+    const form = document.getElementById('adminLoginForm');
+    if(!form) return;
+    const pin = form.pin.value.trim();
+    if(pin && pin === state.adminPin){
+      adminDesbloqueado = true;
+      renderAdministracion();
+    }else{
+      showToast('PIN incorrecto.', 'error');
+    }
+  }
+  function handleLockAdmin(){
+    adminDesbloqueado = false;
+    renderAdministracion();
   }
 
   function openAddCajeroModal(){
@@ -1689,6 +1842,7 @@
     `);
   }
   async function handleSaveCajero(){
+    if(!adminDesbloqueado){ showToast('Necesitas desbloquear Administración con tu PIN.', 'error'); return; }
     const form = document.getElementById('addCajeroForm');
     const nombre = form.nombre.value.trim();
     const codigo = form.codigo.value.trim();
@@ -1709,7 +1863,7 @@
     if(state.cajeros.length===0){ showToast('Agrega al menos un cajero antes de abrir un turno.', 'warn'); return; }
     openModal('Abrir turno', `
       <form id="abrirTurnoForm" class="form-grid">
-        <label>Código de cajero*<input required name="codigo" type="text" autocomplete="off" /></label>
+        <label>Código de cajero*<input required name="codigo" type="password" inputmode="numeric" autocomplete="off" /></label>
         <label>Fondo de caja inicial<input name="fondo_inicial" type="number" min="0" step="0.01" value="0" /></label>
       </form>
     `, `
@@ -1744,7 +1898,7 @@
     const esperado = calcularEsperadoTurno(t.id, t.fondoInicial);
     openModal('Cerrar turno / Corte de caja', `
       <form id="cerrarTurnoForm" class="form-grid">
-        <label>Código de cajero (quien hace el corte)*<input required name="codigo" type="text" autocomplete="off" /></label>
+        <label>Código de cajero (quien hace el corte)*<input required name="codigo" type="password" inputmode="numeric" autocomplete="off" /></label>
         <label>Efectivo contado* — esperado ${formatMoney(esperado.efectivo)}<input required name="efectivo_contado" type="number" min="0" step="0.01" /></label>
         <label>Transferencias confirmadas* — esperado ${formatMoney(esperado.transferencia)}<input required name="transferencia_contado" type="number" min="0" step="0.01" /></label>
         <label>Terminal bancaria confirmada* — esperado ${formatMoney(esperado.terminal)}<input required name="terminal_contado" type="number" min="0" step="0.01" /></label>
@@ -1819,6 +1973,7 @@
     document.querySelectorAll('.panel').forEach(p=> p.classList.toggle('active', p.id === 'panel-'+tab));
     if(tab==='ventas') renderVentas();
     if(tab==='caja') renderCaja();
+    if(tab==='administracion') renderAdministracion();
   }
 
   // ---------- Toast ----------
@@ -1869,12 +2024,27 @@
       case 'ventas-prev-day': shiftVentasDate(-1); break;
       case 'ventas-next-day': shiftVentasDate(1); break;
       case 'print-ticket': printReceipt(id); break;
+      case 'open-whatsapp-ticket': openWhatsappTicketModal(id); break;
+      case 'confirm-send-whatsapp': handleConfirmSendWhatsapp(id); break;
       case 'open-add-cajero': openAddCajeroModal(); break;
       case 'save-cajero': handleSaveCajero(); break;
       case 'open-abrir-turno': openAbrirTurnoModal(); break;
       case 'save-abrir-turno': handleAbrirTurno(); break;
       case 'open-cerrar-turno': openCerrarTurnoModal(); break;
       case 'save-cerrar-turno': handleCerrarTurno(); break;
+      case 'save-admin-pin': handleSaveAdminPin(); break;
+      case 'unlock-admin': handleUnlockAdmin(); break;
+      case 'lock-admin': handleLockAdmin(); break;
+      case 'toggle-codigo-cajero': {
+        const row = btn.closest('tr');
+        const span = row ? row.querySelector('.codigo-oculto') : null;
+        if(span){
+          const revelado = span.dataset.revelado === 'true';
+          if(revelado){ span.textContent = '••••••'; span.dataset.revelado = 'false'; btn.textContent = 'Ver'; }
+          else{ span.textContent = btn.dataset.codigo; span.dataset.revelado = 'true'; btn.textContent = 'Ocultar'; }
+        }
+        break;
+      }
     }
   });
 
