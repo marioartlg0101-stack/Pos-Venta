@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#F3FBF6; --surface:#FFFFFF; --surface-alt:#EAFBF1;
@@ -100,10 +101,24 @@
   .detail-section h4{ font-family:'Space Grotesk',sans-serif; font-size:.95rem; margin-bottom:10px; }
   .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:.88rem; }
   .detail-grid div span{ display:block; color:var(--ink-soft); font-size:.76rem; }
+  .admin-subnav{ display:flex; gap:6px; margin:14px 0 4px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .sub-tab-btn{ padding:9px 14px; border:none; background:transparent; color:var(--ink-soft); font-weight:600; font-size:.86rem; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+  .sub-tab-btn.active{ color:var(--green-700); border-bottom-color:var(--green-600); }
+  .sub-tab-btn:hover:not(.active){ color:var(--ink); }
+  .marca-row{ display:flex; flex-direction:column; gap:16px; }
+  .marca-field{ display:flex; flex-direction:column; gap:6px; }
+  .marca-field label{ font-size:.8rem; font-weight:600; color:var(--ink-soft); }
+  .marca-field input[type="text"]{ padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:.92rem; color:var(--ink); background:var(--surface); }
+  .logo-uploader{ display:flex; align-items:center; gap:14px; }
+  .logo-preview{ width:56px; height:56px; border-radius:10px; object-fit:contain; border:1px solid var(--line); background:var(--surface-alt); padding:6px; }
+  .logo-preview-empty{ display:flex; align-items:center; justify-content:center; font-size:.68rem; color:var(--ink-soft); text-align:center; line-height:1.2; }
+  .color-row{ display:flex; align-items:center; gap:10px; }
+  .color-row input[type="color"]{ width:44px; height:44px; border:1px solid var(--line); border-radius:10px; padding:2px; cursor:pointer; background:var(--surface); }
   .report-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px; }
   .report-card{ background:var(--surface-alt); border-radius:var(--radius-sm); padding:12px 14px; }
   .report-card .v{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:1.1rem; }
   .empty-state{ padding:30px; text-align:center; color:var(--ink-soft); }
+  .mono{ font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
   #toastRoot{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:200; }
   .toast{ background:var(--ink); color:var(--bg); padding:12px 20px; border-radius:999px; font-size:.9rem; font-weight:600; box-shadow:0 10px 30px -10px rgba(0,0,0,.4); }
   .toast-success{ background:var(--green-700); color:#fff; }
@@ -374,12 +389,18 @@
     });
   }
 
+  let clienteSubTab = 'pagos';
+
   async function openClientDetail(negocioId){
     activeNegocioId = negocioId;
     const negocio = negocios.find(n=>n.id===negocioId);
     if(!negocio) return;
-    const { data: pagos } = await supabaseClient.from('pagos').select('*').eq('negocio_id', negocioId).order('fecha', {ascending:false});
+    const [{ data: pagos }, { data: snap }] = await Promise.all([
+      supabaseClient.from('pagos').select('*').eq('negocio_id', negocioId).order('fecha', {ascending:false}),
+      supabaseClient.from('inventario_snapshot').select('*').eq('negocio_id', negocioId).maybeSingle()
+    ]);
     const dias = diasRestantes(negocio.fecha_proximo_pago);
+    clienteSubTab = 'pagos';
 
     openModal(escapeHTML(negocio.nombre_negocio), `
       <div class="detail-section">
@@ -393,42 +414,13 @@
           <div><span>Próximo pago</span>${negocio.fecha_proximo_pago || 'Sin pagos'}${dias!==null && negocio.estatus==='activo' ? (dias<0 ? ` (vencido hace ${Math.abs(dias)}d)` : ` (${dias}d)`) : ''}</div>
         </div>
       </div>
-
-      <div class="detail-section">
-        <h4>Ticket y marca</h4>
-        <div class="form-grid" style="gap:10px;">
-          <label>Dirección<input id="editDireccion" type="text" value="${escapeHTML(negocio.direccion||'')}" /></label>
-          <label>Logotipo${negocio.logo_url ? ' (subir uno reemplaza el actual)' : ''}<input id="editLogoFile" type="file" accept="image/*" /></label>
-          ${negocio.logo_url ? `<img src="${negocio.logo_url}" alt="Logo actual" style="max-height:48px; max-width:120px; object-fit:contain;" />` : `<p style="font-size:.82rem; color:var(--ink-soft);">Sin logotipo todavía.</p>`}
-          <label>Color de marca<input id="editColorPrimario" type="color" value="${negocio.color_primario || '#16A34A'}" style="height:42px; padding:4px;" /></label>
-          <button type="button" class="btn-secondary btn-sm" id="saveTicketInfoBtn" style="align-self:flex-start;">Guardar cambios</button>
-        </div>
-        <div style="margin-top:16px;">
-          <span class="summary-label">Datos completos en el ticket</span>
-          <p style="font-size:.85rem; margin:4px 0 10px;">${negocio.mostrar_datos_ticket ? 'Autorizado: el ticket muestra logo, dirección y teléfono.' : 'No autorizado: el ticket solo muestra el nombre del negocio.'}</p>
-          <button type="button" class="btn-${negocio.mostrar_datos_ticket ? 'ghost' : 'primary'} btn-sm" id="toggleTicketAuthBtn">${negocio.mostrar_datos_ticket ? 'Quitar autorización' : 'Autorizar'}</button>
-        </div>
+      <div class="admin-subnav">
+        <button type="button" class="sub-tab-btn active" data-subtab="pagos">Pagos</button>
+        <button type="button" class="sub-tab-btn" data-subtab="inventario">Inventario</button>
+        <button type="button" class="sub-tab-btn" data-subtab="config">Marca y ticket</button>
+        <button type="button" class="sub-tab-btn" data-subtab="reporte">Reporte</button>
       </div>
-
-      <div class="detail-section">
-        <h4>Pagos</h4>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>Fecha</th><th>Método</th><th>Cubre hasta</th><th class="num">Monto</th></tr></thead>
-            <tbody>${(pagos&&pagos.length) ? pagos.map(p=>`<tr><td>${p.fecha}</td><td>${escapeHTML(p.metodo||'—')}</td><td>${p.cubre_hasta}</td><td class="num">${formatMoney(p.monto)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty-state">Sin pagos registrados.</div></td></tr>'}</tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h4>Reporte a solicitud</h4>
-        <div class="form-grid" style="flex-direction:row; gap:10px; align-items:flex-end;">
-          <label style="flex:1;">Desde<input id="reportFrom" type="date" /></label>
-          <label style="flex:1;">Hasta<input id="reportTo" type="date" /></label>
-          <button type="button" class="btn-secondary btn-sm" id="genReportBtn">Generar</button>
-        </div>
-        <div id="reportOutput"></div>
-      </div>
+      <div id="clienteSubContent"></div>
     `, `
       <button type="button" class="btn-ghost" id="closeDetail">Cerrar</button>
       ${negocio.estatus==='activo'
@@ -439,43 +431,161 @@
 
     document.getElementById('closeDetail').addEventListener('click', closeModal);
     document.getElementById('registerPaymentBtn').addEventListener('click', ()=> openPaymentModal(negocio));
-    document.getElementById('saveTicketInfoBtn').addEventListener('click', async ()=>{
-      const direccion = document.getElementById('editDireccion').value.trim();
-      const color_primario = document.getElementById('editColorPrimario').value;
-      const file = document.getElementById('editLogoFile').files[0];
-      let logo_url = negocio.logo_url;
-      if(file){
-        const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-        const path = `${negocio.codigo}-${Date.now()}.${ext}`;
-        const { error: upErr } = await supabaseClient.storage.from('logos').upload(path, file, { upsert:true });
-        if(upErr){ showToast('No se pudo subir el logotipo: ' + upErr.message, 'error'); return; }
-        const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
-        logo_url = urlData.publicUrl;
-      }
-      const { error } = await supabaseClient.from('negocios').update({ direccion, logo_url, color_primario }).eq('id', negocio.id);
-      if(error){ showToast('No se pudo guardar.', 'error'); return; }
-      showToast('Datos actualizados.', 'success');
-      closeModal();
-      loadDashboard();
-    });
-    document.getElementById('toggleTicketAuthBtn').addEventListener('click', async ()=>{
-      const nuevoValor = !negocio.mostrar_datos_ticket;
-      const { error } = await supabaseClient.from('negocios').update({ mostrar_datos_ticket: nuevoValor }).eq('id', negocio.id);
-      if(error){ showToast('No se pudo actualizar.', 'error'); return; }
-      showToast(nuevoValor ? 'Autorizado: su ticket ya puede mostrar logo, dirección y teléfono.' : 'Autorización retirada.', 'success');
-      closeModal();
-      loadDashboard();
-    });
     const suspendBtn = document.getElementById('suspendBtn');
     if(suspendBtn) suspendBtn.addEventListener('click', ()=> toggleEstatus(negocio, 'suspendido'));
     const reactivateBtn = document.getElementById('reactivateBtn');
     if(reactivateBtn) reactivateBtn.addEventListener('click', ()=> toggleEstatus(negocio, 'activo'));
 
-    const from = document.getElementById('reportFrom');
-    const to = document.getElementById('reportTo');
-    to.value = todayStr();
-    from.value = addMonths(todayStr(), -1);
-    document.getElementById('genReportBtn').addEventListener('click', ()=> generarReporte(negocioId, from.value, to.value));
+    document.querySelectorAll('[data-subtab]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        clienteSubTab = btn.dataset.subtab;
+        document.querySelectorAll('[data-subtab]').forEach(b=> b.classList.toggle('active', b.dataset.subtab===clienteSubTab));
+        renderClienteSubContent(negocio, pagos, snap);
+      });
+    });
+    renderClienteSubContent(negocio, pagos, snap);
+  }
+
+  function renderClienteSubContent(negocio, pagos, snap){
+    const el = document.getElementById('clienteSubContent');
+    if(!el) return;
+
+    if(clienteSubTab==='pagos'){
+      el.innerHTML = `
+        <div class="detail-section">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Fecha</th><th>Método</th><th>Cubre hasta</th><th class="num">Monto</th></tr></thead>
+              <tbody>${(pagos&&pagos.length) ? pagos.map(p=>`<tr><td>${p.fecha}</td><td>${escapeHTML(p.metodo||'—')}</td><td>${p.cubre_hasta}</td><td class="num">${formatMoney(p.monto)}</td></tr>`).join('') : '<tr><td colspan="4"><div class="empty-state">Sin pagos registrados.</div></td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>`;
+
+    }else if(clienteSubTab==='inventario'){
+      const productos = (snap && snap.productos) || [];
+      const valorTotal = productos.reduce((s,p)=> s + (Number(p.cost)||0)*(Number(p.stock)||0), 0);
+      const filas = productos.map(p=>`<tr><td>${escapeHTML(p.name)}</td><td class="num">${formatMoney(p.cost||0)}</td><td class="num">${p.stock}</td><td class="num">${formatMoney((p.cost||0)*p.stock)}</td></tr>`).join('');
+      el.innerHTML = `
+        <div class="detail-section">
+          <div class="panel-header" style="margin-bottom:10px;">
+            <p style="font-size:.82rem; color:var(--ink-soft); margin:0;">${snap && snap.updated_at ? 'Última actualización: '+new Date(snap.updated_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : 'Sin respaldo de inventario todavía.'}</p>
+            <button type="button" class="btn-secondary btn-sm" id="exportarInventarioBtn" ${productos.length?'':'disabled'}>Exportar a Excel</button>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Producto</th><th class="num">Costo</th><th class="num">Existencia</th><th class="num">Valor</th></tr></thead>
+              <tbody>${filas || '<tr><td colspan="4"><div class="empty-state">Sin datos de inventario todavía.</div></td></tr>'}</tbody>
+            </table>
+          </div>
+          ${productos.length ? `<p style="font-size:.85rem; margin-top:10px;"><strong>Valor total: ${formatMoney(valorTotal)}</strong></p>` : ''}
+        </div>`;
+      const exportBtn = document.getElementById('exportarInventarioBtn');
+      if(exportBtn) exportBtn.addEventListener('click', ()=> exportarInventarioExcel(negocio, productos));
+
+    }else if(clienteSubTab==='config'){
+      el.innerHTML = `
+        <div class="detail-section">
+          <h4>Ticket y marca</h4>
+          <div class="marca-row">
+            <div class="marca-field">
+              <label for="editDireccion">Dirección</label>
+              <input id="editDireccion" type="text" value="${escapeHTML(negocio.direccion||'')}" />
+            </div>
+            <div class="marca-field">
+              <label>Logotipo</label>
+              <div class="logo-uploader">
+                ${negocio.logo_url ? `<img src="${negocio.logo_url}" alt="Logo actual" class="logo-preview" />` : `<div class="logo-preview logo-preview-empty">Sin logo</div>`}
+                <label class="btn-secondary btn-sm" style="cursor:pointer;">Cambiar
+                  <input id="editLogoFile" type="file" accept="image/*" style="display:none;" />
+                </label>
+              </div>
+            </div>
+            <div class="marca-field">
+              <label for="editColorPrimario">Color de marca</label>
+              <div class="color-row">
+                <input id="editColorPrimario" type="color" value="${negocio.color_primario || '#16A34A'}" />
+                <span id="colorHexLabel" class="mono">${(negocio.color_primario || '#16A34A').toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn-secondary btn-sm" id="saveTicketInfoBtn" style="margin-top:16px;">Guardar cambios</button>
+          <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--line);">
+            <span class="summary-label">Datos completos en el ticket</span>
+            <p style="font-size:.85rem; margin:4px 0 10px;">${negocio.mostrar_datos_ticket ? 'Autorizado: el ticket muestra logo, dirección y teléfono.' : 'No autorizado: el ticket solo muestra el nombre del negocio.'}</p>
+            <button type="button" class="btn-${negocio.mostrar_datos_ticket ? 'ghost' : 'primary'} btn-sm" id="toggleTicketAuthBtn">${negocio.mostrar_datos_ticket ? 'Quitar autorización' : 'Autorizar'}</button>
+          </div>
+        </div>
+        <div class="detail-section">
+          <h4>Facturación</h4>
+          <p style="font-size:.85rem; margin:0 0 10px; color:var(--ink-soft);">${negocio.facturacion_habilitada ? 'Activada: al cobrar, el punto de venta le pregunta al cliente final si requiere factura y le pide sus datos fiscales.' : 'Desactivada: el punto de venta no ofrece la opción de factura.'}</p>
+          <p style="font-size:.78rem; margin:0 0 10px; color:var(--ink-soft);">Esto guarda la solicitud (RFC, razón social, etc.) para que tú la proceses después — todavía no timbra la factura de forma automática.</p>
+          <button type="button" class="btn-${negocio.facturacion_habilitada ? 'ghost' : 'primary'} btn-sm" id="toggleFacturacionBtn">${negocio.facturacion_habilitada ? 'Desactivar facturación' : 'Activar facturación'}</button>
+        </div>`;
+      document.getElementById('saveTicketInfoBtn').addEventListener('click', async ()=>{
+        const direccion = document.getElementById('editDireccion').value.trim();
+        const color_primario = document.getElementById('editColorPrimario').value;
+        const file = document.getElementById('editLogoFile').files[0];
+        let logo_url = negocio.logo_url;
+        if(file){
+          const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+          const path = `${negocio.codigo}-${Date.now()}.${ext}`;
+          const { error: upErr } = await supabaseClient.storage.from('logos').upload(path, file, { upsert:true });
+          if(upErr){ showToast('No se pudo subir el logotipo: ' + upErr.message, 'error'); return; }
+          const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(path);
+          logo_url = urlData.publicUrl;
+        }
+        const { error } = await supabaseClient.from('negocios').update({ direccion, logo_url, color_primario }).eq('id', negocio.id);
+        if(error){ showToast('No se pudo guardar.', 'error'); return; }
+        showToast('Datos actualizados.', 'success');
+        closeModal();
+        loadDashboard();
+      });
+      document.getElementById('toggleTicketAuthBtn').addEventListener('click', async ()=>{
+        const nuevoValor = !negocio.mostrar_datos_ticket;
+        const { error } = await supabaseClient.from('negocios').update({ mostrar_datos_ticket: nuevoValor }).eq('id', negocio.id);
+        if(error){ showToast('No se pudo actualizar.', 'error'); return; }
+        showToast(nuevoValor ? 'Autorizado: su ticket ya puede mostrar logo, dirección y teléfono.' : 'Autorización retirada.', 'success');
+        closeModal();
+        loadDashboard();
+      });
+      document.getElementById('toggleFacturacionBtn').addEventListener('click', async ()=>{
+        const nuevoValor = !negocio.facturacion_habilitada;
+        const { error } = await supabaseClient.from('negocios').update({ facturacion_habilitada: nuevoValor }).eq('id', negocio.id);
+        if(error){ showToast('No se pudo actualizar.', 'error'); return; }
+        showToast(nuevoValor ? 'Facturación activada para este negocio.' : 'Facturación desactivada.', 'success');
+        closeModal();
+        loadDashboard();
+      });
+      const colorInput = document.getElementById('editColorPrimario');
+      const colorLabel = document.getElementById('colorHexLabel');
+      colorInput.addEventListener('input', ()=>{ colorLabel.textContent = colorInput.value.toUpperCase(); });
+
+    }else if(clienteSubTab==='reporte'){
+      el.innerHTML = `
+        <div class="detail-section">
+          <div class="form-grid" style="flex-direction:row; gap:10px; align-items:flex-end;">
+            <label style="flex:1;">Desde<input id="reportFrom" type="date" /></label>
+            <label style="flex:1;">Hasta<input id="reportTo" type="date" /></label>
+            <button type="button" class="btn-secondary btn-sm" id="genReportBtn">Generar</button>
+          </div>
+          <div id="reportOutput"></div>
+        </div>`;
+      const from = document.getElementById('reportFrom');
+      const to = document.getElementById('reportTo');
+      to.value = todayStr();
+      from.value = addMonths(todayStr(), -1);
+      document.getElementById('genReportBtn').addEventListener('click', ()=> generarReporte(negocio.id, from.value, to.value));
+    }
+  }
+
+  function exportarInventarioExcel(negocio, productos){
+    if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el generador de Excel.', 'error'); return; }
+    const datos = [['Nombre','Categoría','SKU','Precio','Costo','Existencia','Stock mínimo']];
+    productos.forEach(p=> datos.push([p.name||'', p.category||'', p.sku||'', p.price||0, p.cost||0, p.stock||0, p.minStock||'']));
+    const ws = XLSX.utils.aoa_to_sheet(datos);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+    XLSX.writeFile(wb, `inventario_${negocio.codigo}_${todayStr()}.xlsx`);
   }
 
   async function toggleEstatus(negocio, nuevoEstatus){
@@ -535,6 +645,17 @@
     const productos = (snap && snap.productos) || [];
     const valorInventario = productos.reduce((s,p)=> s + (Number(p.cost)||0)*(Number(p.stock)||0), 0);
     const inventarioFilas = productos.map(p=>`<tr><td>${escapeHTML(p.name)}</td><td class="num">${formatMoney(p.cost||0)}</td><td class="num">${p.stock}</td><td class="num">${formatMoney((p.cost||0)*p.stock)}</td></tr>`).join('');
+    const facturasPendientes = ventasList.filter(v=> v.requiere_factura);
+    const facturasFilas = facturasPendientes.map(v=>{
+      const df = v.datos_fiscales || {};
+      return `<tr>
+        <td class="mono">${escapeHTML(v.folio)}</td>
+        <td>${escapeHTML(df.razon_social||'—')}</td>
+        <td class="mono">${escapeHTML(df.rfc||'—')}</td>
+        <td>${escapeHTML(df.correo||'—')}</td>
+        <td class="num">${formatMoney(v.total)}</td>
+      </tr>`;
+    }).join('');
 
     output.innerHTML = `
       <div class="report-grid">
@@ -549,6 +670,13 @@
         <table class="data-table">
           <thead><tr><th>Producto</th><th class="num">Costo unit.</th><th class="num">Debería tener</th><th class="num">Valor</th></tr></thead>
           <tbody>${inventarioFilas || '<tr><td colspan="4"><div class="empty-state">Sin datos de inventario todavía.</div></td></tr>'}</tbody>
+        </table>
+      </div>
+      <h4 style="margin-top:16px; font-family:'Space Grotesk',sans-serif; font-size:.9rem;">Facturas solicitadas en este periodo (${facturasPendientes.length})</h4>
+      <div class="table-scroll" style="margin-top:8px;">
+        <table class="data-table">
+          <thead><tr><th>Folio</th><th>Razón social</th><th>RFC</th><th>Correo</th><th class="num">Total</th></tr></thead>
+          <tbody>${facturasFilas || '<tr><td colspan="5"><div class="empty-state">Nadie pidió factura en este periodo.</div></td></tr>'}</tbody>
         </table>
       </div>
       <p style="font-size:.78rem; color:var(--ink-soft); margin-top:10px;">El inventario es la foto más reciente que mandó el punto de venta, no de la fecha exacta "hasta"; las ventas y la inversión sí corresponden al rango elegido.</p>
