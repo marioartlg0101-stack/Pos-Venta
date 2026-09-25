@@ -2249,10 +2249,6 @@
         }).join('') : '<div class="empty-state">Sin actividad este día.</div>'}
       </div>
     `;
-    document.getElementById('movimientosDateInput').addEventListener('change', (e)=>{
-      movimientosCajeroFecha = e.target.value;
-      renderMovimientosDia();
-    });
     const exportBtn = document.getElementById('exportarMovimientosBtn');
     if(exportBtn) exportBtn.addEventListener('click', ()=> exportarMovimientosPDF(delDia));
   }
@@ -2561,6 +2557,25 @@
 
   document.addEventListener('change', function(e){
     if(e.target.id==='ventasDateInput'){ ventasDate = e.target.value; renderVentas(); }
+    else if(e.target.id==='movimientosDateInput'){ movimientosCajeroFecha = e.target.value; renderMovimientosDia(); }
+  });
+
+  // Ningún formulario del sistema debe recargar la página al presionar Enter.
+  // En vez de eso, se dispara el botón de acción correspondiente (esté dentro
+  // del propio formulario, o en el pie del modal que lo contiene).
+  document.addEventListener('submit', function(e){
+    e.preventDefault();
+    const form = e.target;
+    if(!(form instanceof HTMLFormElement)) return;
+    let candidatos = Array.from(form.querySelectorAll('button[data-action]')).filter(b=> b.dataset.action !== 'close-modal');
+    if(!candidatos.length){
+      const modal = form.closest('.modal');
+      if(modal){
+        candidatos = Array.from(modal.querySelectorAll('.modal-footer button[data-action]')).filter(b=> b.dataset.action !== 'close-modal');
+      }
+    }
+    const btn = candidatos[candidatos.length-1];
+    if(btn && !btn.disabled) btn.click();
   });
 
   // ---------- Init ----------

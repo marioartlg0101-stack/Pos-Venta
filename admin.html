@@ -166,6 +166,16 @@
   function formatMoney(n){
     return '$' + (Number(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
+  // Evita que un formulario recargue la página al presionar Enter; en vez de
+  // eso, dispara el mismo botón que ya hace el guardado.
+  function evitarSubmitNativo(form, buttonId){
+    if(!form) return;
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const btn = document.getElementById(buttonId);
+      if(btn && !btn.disabled) btn.click();
+    });
+  }
   function todayStr(){
     const d = new Date();
     const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
@@ -361,6 +371,7 @@
     const form = document.getElementById('newClientForm');
     form.giro.addEventListener('blur', ()=>{ if(!form.codigo.value) form.codigo.value = sugerirCodigo(form.giro.value, form.nombre_negocio.value); });
     document.getElementById('cancelNewClient').addEventListener('click', closeModal);
+    evitarSubmitNativo(form, 'saveNewClient');
     document.getElementById('saveNewClient').addEventListener('click', async ()=>{
       const nombre_negocio = form.nombre_negocio.value.trim();
       const codigo = form.codigo.value.trim();
@@ -684,6 +695,7 @@
       <button type="button" class="btn-ghost" data-action="close-modal">Cancelar</button>
       <button type="button" class="btn-primary" id="guardarEditarCajeroBtn">Guardar</button>
     `);
+    evitarSubmitNativo(document.getElementById('editarCajeroForm'), 'guardarEditarCajeroBtn');
     document.getElementById('guardarEditarCajeroBtn').addEventListener('click', async ()=>{
       const form = document.getElementById('editarCajeroForm');
       const nombre = form.nombre.value.trim();
@@ -723,6 +735,7 @@
       <button type="button" class="btn-primary" id="savePayment">Guardar pago</button>
     `);
     document.getElementById('cancelPayment').addEventListener('click', closeModal);
+    evitarSubmitNativo(document.getElementById('paymentForm'), 'savePayment');
     document.getElementById('savePayment').addEventListener('click', async ()=>{
       const form = document.getElementById('paymentForm');
       const monto = Number(form.monto.value);
